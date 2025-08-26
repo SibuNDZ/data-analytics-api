@@ -1,0 +1,16 @@
+{
+  "compatibility_date": "2025-04-01",
+  "main": "src/index.ts",
+  "name": "data-analytics-api",
+  "upload_source_maps": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_id": "6633e74a-4928-4bc2-96b9-e57022079169",
+      "database_name": "analytics-db"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
