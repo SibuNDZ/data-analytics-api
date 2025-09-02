@@ -1,3 +1,5 @@
+// PUBLIC API DOCUMENTATION
+
 export interface Env {
   DB: D1Database;
 }
@@ -49,12 +51,12 @@ function errorResponse(message: string, status: number = 400) {
 // Data Management Endpoints
 async function handleDataUpload(request: Request, env: Env, client: Client) {
   try {
-    const body = await request.json();
+    const body: { source_name: string; source_type: string; data_rows: any[] } = await request.json();
     const { source_name: sourceName, source_type: sourceType, data_rows: dataRows } = body;
 
-   if (!sourceName || !sourceType || !Array.isArray(dataRows)) {
-  return errorResponse('Missing required fields: source_name, source_type, data_rows');
-}
+    if (!sourceName || !sourceType || !Array.isArray(dataRows)) {
+      return errorResponse('Missing required fields: source_name, source_type, data_rows');
+    }
 
     // Create or update data source
     const sourceResult = await env.DB.prepare(`
@@ -108,7 +110,7 @@ async function handleDataSources(request: Request, env: Env, client: Client) {
 // Analytics Endpoints
 async function handleAnalyticsQuery(request: Request, env: Env, client: Client) {
   try {
-    const body = await request.json();
+    const body: { source_id: number; analysis_type: string; parameters?: any } = await request.json();
     const { source_id: sourceId, analysis_type: analysisType, parameters } = body;
 
     if (!sourceId || !analysisType) {
@@ -207,7 +209,7 @@ async function handleModelList(request: Request, env: Env, client: Client) {
 
 async function handleModelPredict(request: Request, env: Env, client: Client) {
   try {
-    const body = await request.json();
+    const body: { model_id: number; input_data: any } = await request.json();
     const { model_id: modelId, input_data: inputData } = body;
 
     if (!modelId || !inputData) {
@@ -236,7 +238,7 @@ async function handleModelPredict(request: Request, env: Env, client: Client) {
 // Report Generation
 async function handleReportGenerate(request: Request, env: Env, client: Client) {
   try {
-    const body = await request.json();
+    const body: { report_type: string; parameters?: any } = await request.json();
     const { report_type: reportType, parameters } = body;
 
     // Generate basic dashboard report
@@ -273,6 +275,69 @@ async function handleReportGenerate(request: Request, env: Env, client: Client) 
   }
 }
 
+// Swagger UI HTML template
+const swaggerHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Data Science API - Swagger UI</title>
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css">
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.11.0/index.css">
+  <style>
+    html {
+      box-sizing: border-box;
+      overflow: -moz-scrollbars-vertical;
+      overflow-y: scroll;
+    }
+    *,
+    *:before,
+    *:after {
+      box-sizing: inherit;
+    }
+    body {
+      margin: 0;
+      background: #fafafa;
+    }
+    .swagger-ui .topbar {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js" charset="UTF-8"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+  <script>
+    window.onload = function() {
+      const ui = SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "StandaloneLayout",
+        defaultModelsExpandDepth: -1,
+        defaultModelExpandDepth: 1,
+        defaultModelRendering: 'example',
+        displayRequestDuration: true,
+        docExpansion: 'none',
+        tryItOutEnabled: true,
+        persistAuthorization: true
+      });
+      
+      window.ui = ui;
+    };
+  </script>
+</body>
+</html>
+`;
+
 // Main router
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -289,6 +354,448 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     });
   }
 
+  // ✅ Serve Swagger UI documentation (publicly accessible)
+  if (path === '/docs' || path === '/swagger' || path === '/api-docs') {
+    return new Response(swaggerHtml, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+      },
+    });
+  }
+
+  // ✅ Serve OpenAPI spec (publicly accessible)
+  if (path === '/openapi.json' || path === '/api/openapi.json') {
+    const openapiSpec = {
+      openapi: "3.0.3",
+      info: {
+        title: "Predictive Analytics API",
+        description: "Comprehensive API for Data Management, Data Analysis, Business Intelligence, Machine Learning, and Artificial Intelligence services",
+        version: "1.0.0",
+        contact: {
+          name: "API Support",
+          email: "sibusiso.ndzukuma@dsnresearch.co.za",
+          url: "https://dsnresearch.com"
+        },
+        license: {
+          name: "MIT License",
+          url: "https://opensource.org/licenses/MIT"
+        }
+      },
+      servers: [
+        {
+          url: "https://data-analytics-api.sibusiso-ndzukuma.workers.dev",
+          description: "Production server"
+        },
+        {
+          url: "http://127.0.0.1:8787",
+          description: "Development server"
+        }
+      ],
+      security: [
+        {
+          ApiKeyAuth: []
+        }
+      ],
+      components: {
+        securitySchemes: {
+          ApiKeyAuth: {
+            type: "apiKey",
+            in: "header",
+            name: "X-API-Key"
+          }
+        },
+        schemas: {
+          ErrorResponse: {
+            type: "object",
+            properties: {
+              error: { type: "string" },
+              success: { type: "boolean" }
+            }
+          }
+        }
+      },
+      paths: {
+        "/health": {
+          get: {
+            summary: "Health check",
+            responses: {
+              "200": {
+                description: "API is healthy",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        status: { type: "string" },
+                        timestamp: { type: "string", format: "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/data/upload": {
+          post: {
+            summary: "Upload data for processing",
+            security: [{ ApiKeyAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      source_name: { type: "string" },
+                      source_type: { type: "string" },
+                      data_rows: { type: "array", items: { type: "object" } }
+                    },
+                    required: ["source_name", "source_type", "data_rows"]
+                  }
+                }
+              }
+            },
+            responses: {
+              "200": {
+                description: "Data uploaded successfully",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        success: { type: "boolean" },
+                        message: { type: "string" },
+                        source_id: { type: "integer" }
+                      }
+                    }
+                  }
+                }
+              },
+              "401": {
+                description: "Unauthorized",
+                content: {
+                  "application/json": {
+                    schema: {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/data/sources": {
+          get: {
+            summary: "List data sources",
+            security: [{ ApiKeyAuth: [] }],
+            responses: {
+              "200": {
+                description: "List of data sources",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        success: { type: "boolean" },
+                        data_sources: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              id: { type: "integer" },
+                              source_name: { type: "string" },
+                              source_type: { type: "string" },
+                              row_count: { type: "integer" },
+                              last_ingested: { type: "string", format: "date-time" },
+                              created_at: { type: "string", format: "date-time" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "401": {
+                description: "Unauthorized",
+                content: {
+                  "application/json": {
+                    schema: {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/analytics/query": {
+          post: {
+            summary: "Run analytics query",
+            security: [{ ApiKeyAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      source_id: { type: "integer" },
+                      analysis_type: { type: "string" },
+                      parameters: { type: "object" }
+                    },
+                    required: ["source_id", "analysis_type"]
+                  }
+                }
+              }
+            },
+            responses: {
+              "200": {
+                description: "Analysis job created",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        success: { type: "boolean" },
+                        job_id: { type: "integer" },
+                        status: { type: "string" },
+                        results: { type: "object" }
+                      }
+                    }
+                  }
+                }
+              },
+              "401": {
+                description: "Unauthorized",
+                content: {
+                  "application/json": {
+                    schema: {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/analytics/jobs/{jobId}": {
+          get: {
+            summary: "Get analysis job status",
+            security: [{ ApiKeyAuth: [] }],
+            parameters: [
+              {
+                name: "jobId",
+                in: "path",
+                required: true,
+                schema: { type: "integer" }
+              }
+            ],
+            responses: {
+              "200": {
+                description: "Job status and results",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        success: { type: "boolean" },
+                        job: { type: "object" }
+                      }
+                    }
+                  }
+                }
+              },
+              "401": {
+                description: "Unauthorized",
+                content: {
+                  "application/json": {
+                    schema: {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  }
+                }
+              },
+              "404": {
+                description: "Job not found",
+                content: {
+                  "application/json": {
+                    schema: {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/models/list": {
+          get: {
+            summary: "List available ML models",
+            security: [{ ApiKeyAuth: [] }],
+            responses: {
+              "200": {
+                description: "List of ML models",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        success: { type: "boolean" },
+                        models: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              id: { type: "integer" },
+                              model_name: { type: "string" },
+                              model_type: { type: "string" },
+                              version: { type: "string" },
+                              is_active: { type: "boolean" },
+                              created_at: { type: "string", format: "date-time" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "401": {
+                description: "Unauthorized",
+                content: {
+                  "application/json": {
+                    schema: {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/models/predict": {
+          post: {
+            summary: "Generate prediction",
+            security: [{ ApiKeyAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      model_id: { type: "integer" },
+                      input_data: { type: "object" }
+                    },
+                    required: ["model_id", "input_data"]
+                  }
+                }
+              }
+            },
+            responses: {
+              "200": {
+                description: "Prediction result",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        success: { type: "boolean" },
+                        prediction: { type: "object" }
+                      }
+                    }
+                  }
+                }
+              },
+              "401": {
+                description: "Unauthorized",
+                content: {
+                  "application/json": {
+                    schema: {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/reports/generate": {
+          post: {
+            summary: "Generate report",
+            security: [{ ApiKeyAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      report_type: { type: "string" },
+                      parameters: { type: "object" }
+                    },
+                    required: ["report_type"]
+                  }
+                }
+              }
+            },
+            responses: {
+              "200": {
+                description: "Generated report",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        success: { type: "boolean" },
+                        report: { type: "object" }
+                      }
+                    }
+                  }
+                }
+              },
+              "401": {
+                description: "Unauthorized",
+                content: {
+                  "application/json": {
+                    schema: {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
+    return new Response(JSON.stringify(openapiSpec, null, 2), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
+
+  // ✅ License endpoint
+  if (path === '/license') {
+    const year = new Date().getFullYear();
+    const licenseText = `Copyright ${year} Sibusiso Ndzukuma
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.`;
+
+    return new Response(licenseText, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+    });
+  }
+
   // Health check
   if (path === '/health') {
     return jsonResponse({ status: 'healthy', timestamp: new Date().toISOString() });
@@ -297,7 +804,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   // API documentation endpoint
   if (path === '/' || path === '/api') {
     return jsonResponse({
-      name: 'Data Science API',
+      name: 'Predictive Analytics API',
       version: '1.0.0',
       endpoints: {
         'POST /api/data/upload': 'Upload data for processing',
@@ -307,6 +814,11 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         'GET /api/models/list': 'List available ML models',
         'POST /api/models/predict': 'Generate predictions',
         'POST /api/reports/generate': 'Generate reports'
+      },
+      documentation: {
+        'GET /docs': 'Interactive API documentation (Swagger UI)',
+        'GET /openapi.json': 'OpenAPI specification',
+        'GET /health': 'Health check endpoint'
       },
       authentication: 'Include X-API-Key header or Authorization: Bearer {key}'
     });

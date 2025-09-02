@@ -1,7 +1,7 @@
 -- Migration number: 0002 	 2025-08-26T20:52:55.916Z
 -- Client and project management
 CREATE TABLE clients (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   api_key TEXT UNIQUE NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -9,8 +9,9 @@ CREATE TABLE clients (
 
 -- Data sources and ingestion tracking
 CREATE TABLE data_sources (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  client_id INTEGER REFERENCES clients(id),
+  id INTEGER PRIMARY KEY IDENTITY(1,1),
+  client_id INTEGER,
+  FOREIGN KEY (client_id) REFERENCES clients(id),
   source_name TEXT NOT NULL,
   source_type TEXT NOT NULL, -- 'file', 'api', 'database'
   schema_definition TEXT, -- JSON as TEXT for D1 compatibility
@@ -21,7 +22,7 @@ CREATE TABLE data_sources (
 
 -- Analysis job queue and results
 CREATE TABLE analysis_jobs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY IDENTITY(1,1),
   client_id INTEGER REFERENCES clients(id),
   job_type TEXT NOT NULL, -- 'descriptive', 'predictive', 'report'
   status TEXT DEFAULT 'pending', -- 'pending', 'running', 'completed', 'failed'
@@ -33,7 +34,7 @@ CREATE TABLE analysis_jobs (
 
 -- ML model registry
 CREATE TABLE ml_models (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY IDENTITY(1,1),
   client_id INTEGER REFERENCES clients(id),
   model_name TEXT NOT NULL,
   model_type TEXT NOT NULL, -- 'regression', 'classification', 'clustering'
@@ -46,7 +47,7 @@ CREATE TABLE ml_models (
 
 -- Raw data storage (for smaller datasets)
 CREATE TABLE raw_data (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY IDENTITY(1,1),
   source_id INTEGER REFERENCES data_sources(id),
   data_row TEXT, -- JSON as TEXT for D1 compatibility
   ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP

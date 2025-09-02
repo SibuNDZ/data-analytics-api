@@ -1,0 +1,509 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Data Science API",
+    "description": "Comprehensive API for Data Management, Data Analysis, Business Intelligence, Machine Learning, and Artificial Intelligence services <br><a href='mailto:Sibusiso.Ndzukuma@dsnresearch.co.za'>Send email to API Support</a>",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support",
+      "email": "Sibusiso.Ndzukuma@dsnresearch.co.za",
+      "url": "https://www.dsnresearch.com"
+    },
+    "license": {
+      "name": "MIT License",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://data-analytics-api.sibusiso-ndzukuma.workers.dev",
+      "description": "Production server"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API Key for authentication. Include in request header."
+      }
+    },
+    "schemas": {
+      "Client": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        },
+        "required": ["id", "name", "created_at"]
+      },
+      "DataUploadRequest": {
+        "type": "object",
+        "properties": {
+          "source_name": { "type": "string", "example": "Sales Q3 Data" },
+          "source_type": { "type": "string", "enum": ["file", "database", "api", "stream"], "example": "file" },
+          "data_rows": {
+            "type": "array",
+            "items": { "type": "object" },
+            "example": [{ "id": 1, "value": 100 }, { "id": 2, "value": 200 }]
+          }
+        },
+        "required": ["source_name", "source_type", "data_rows"]
+      },
+      "DataUploadResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "message": { "type": "string" },
+          "source_id": { "type": "integer" }
+        }
+      },
+      "DataSource": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "source_name": { "type": "string" },
+          "source_type": { "type": "string" },
+          "row_count": { "type": "integer" },
+          "last_ingested": { "type": "string", "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DataSourcesResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data_sources": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DataSource" }
+          }
+        }
+      },
+      "AnalyticsQueryRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": { "type": "integer" },
+          "analysis_type": { "type": "string", "enum": ["descriptive", "correlation", "trend"] },
+          "parameters": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["source_id", "analysis_type"]
+      },
+      "AnalyticsQueryResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "job_id": { "type": "integer" },
+          "status": { "type": "string" },
+          "results": { "type": "object" }
+        }
+      },
+      "JobStatusResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "job": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "job_type": { "type": "string" },
+              "status": { "type": "string" },
+              "results": { "type": "object" },
+              "created_at": { "type": "string", "format": "date-time" },
+              "completed_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "ModelListResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "integer" },
+                "model_name": { "type": "string" },
+                "model_type": { "type": "string" },
+                "version": { "type": "string" },
+                "is_active": { "type": "boolean" },
+                "created_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      },
+      "PredictionRequest": {
+        "type": "object",
+        "properties": {
+          "model_id": { "type": "integer" },
+          "input_data": { "type": "object" }
+        },
+        "required": ["model_id", "input_data"]
+      },
+      "PredictionResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "prediction": {
+            "type": "object",
+            "properties": {
+              "model_id": { "type": "integer" },
+              "prediction": { "type": "string" },
+              "confidence": { "type": "number", "format": "float" },
+              "timestamp": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "ReportGenerateRequest": {
+        "type": "object",
+        "properties": {
+          "report_type": { "type": "string" },
+          "parameters": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["report_type"]
+      },
+      "ReportResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "report": { "type": "object" }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "success": { "type": "boolean" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Authentication required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Health check",
+        "description": "Check if the API is running",
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api": {
+      "get": {
+        "tags": ["Documentation"],
+        "summary": "API Overview",
+        "description": "Get list of available endpoints and usage info",
+        "responses": {
+          "200": {
+            "description": "API metadata and endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "version": { "type": "string" },
+                    "endpoints": { "type": "object" },
+                    "authentication": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/data/upload": {
+      "post": {
+        "tags": ["Data Management"],
+        "summary": "Upload data for processing",
+        "description": "Upload structured data to be stored and analyzed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Data uploaded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/data/sources": {
+      "get": {
+        "tags": ["Data Management"],
+        "summary": "List all data sources",
+        "description": "Get a list of all data sources for the authenticated client",
+        "responses": {
+          "200": {
+            "description": "List of data sources",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataSourcesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/analytics/query": {
+      "post": {
+        "tags": ["Data Analysis"],
+        "summary": "Run analytics query",
+        "description": "Start an analysis job on a data source",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyticsQueryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis job created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsQueryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/analytics/jobs/{jobId}": {
+      "get": {
+        "tags": ["Data Analysis"],
+        "summary": "Get analysis job status",
+        "description": "Retrieve the status and results of an analytics job",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "ID of the job to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status and results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/models/list": {
+      "get": {
+        "tags": ["Machine Learning"],
+        "summary": "List available ML models",
+        "description": "Get a list of active machine learning models",
+        "responses": {
+          "200": {
+            "description": "List of ML models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/models/predict": {
+      "post": {
+        "tags": ["Machine Learning"],
+        "summary": "Generate prediction",
+        "description": "Use a trained model to make a prediction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Prediction result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/reports/generate": {
+      "post": {
+        "tags": ["Business Intelligence"],
+        "summary": "Generate report",
+        "description": "Generate a summary report of data and analytics",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportGenerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generated report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  }
+}
