@@ -32,7 +32,8 @@
     "predeploy": "echo \"Skipping remote D1 migrations\"",
     "seedLocalD1": "wrangler d1 migrations apply DB --local",
     "test": "echo \"No tests yet. Skipping...\" && exit 0",
-    "build": "tsc"
+    "build": "tsc && wrangler build",
+    "deploy:prod": "wrangler deploy --env production"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.5.2"

@@ -13,6 +13,7 @@ ENVIRONMENT = "development"
 
 [env.staging]
 name = "data-analytics-api-staging"
+compatibility_date = "2025-10-04"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -25,6 +26,7 @@ ENVIRONMENT = "staging"
 
 [env.production]
 name = "data-analytics-api-prod"
+compatibility_date = "2025-10-04"
 
 [[env.production.d1_databases]]
 binding = "DB"
