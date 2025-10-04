@@ -36,3 +36,6 @@ database_id = "b0d30640-6935-48c7-8df8-da1bdbe643df"  # Full UUID
 [env.production.vars]
 JWT_SECRET = "Sc6CG6iPnXSy02n85U0qfTpVV50YekNpi7bkOEEfCxQ="
 ENVIRONMENT = "production"
+
+[ai]
+binding = "AI"
