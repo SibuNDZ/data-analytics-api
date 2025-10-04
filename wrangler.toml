@@ -2,40 +2,51 @@ name = "data-analytics-api"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
-[[d1_databases]]
-binding = "DB"
-database_name = "analytics-db"
-database_id = "6633e74a-4928-4bc2-96b9-e57022079169"  # Copy the full UUID from your dashboard
+# ❌ REMOVE these top-level bindings — they cause conflicts
+# [ai]
+# binding = "AI"
+# 
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "analytics-db"
+# database_id = "6633e74a-4928-4bc2-96b9-e57022079169"
 
+# ✅ Keep top-level vars only if needed for local dev
 [vars]
 JWT_SECRET = "5XBCREFCKWm4HXAGhfI8cIBN3Jgjtx3u5Wpj/7zamwI="
 ENVIRONMENT = "development"
 
+# --- Staging Environment ---
 [env.staging]
 name = "data-analytics-api-staging"
 compatibility_date = "2025-10-04"
 
+[env.staging.ai]
+binding = "AI"
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "analytics-api-staging"
-database_id = "b47d8449-8491-496c-a70e-2d5531909ae1"  # Full UUID
+database_id = "b47d8449-8491-496c-a70e-2d5531909ae1"
 
 [env.staging.vars]
 JWT_SECRET = "MDi0xE8YVsSzw6YpjPorUHRIdvxjX9gTXSlIsGNCe/g="
 ENVIRONMENT = "staging"
 
+# --- Production Environment ---
 [env.production]
 name = "data-analytics-api-prod"
 compatibility_date = "2025-10-04"
 
+[env.production.ai]
+binding = "AI"
+
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "analytics-api-production"
-database_id = "b0d30640-6935-48c7-8df8-da1bdbe643df"  # Full UUID
+database_id = "b0d30640-6935-48c7-8df8-da1bdbe643df"
 
 [env.production.vars]
 JWT_SECRET = "Sc6CG6iPnXSy02n85U0qfTpVV50YekNpi7bkOEEfCxQ="
 ENVIRONMENT = "production"
 
-[ai]
-binding = "AI"
