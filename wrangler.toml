@@ -1,0 +1,36 @@
+name = "data-analytics-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "analytics-db"
+database_id = "66633e74a-4928-4bc2-96b9-e57022079169"  # Copy the full UUID from your dashboard
+
+[vars]
+JWT_SECRET = "5XBCREFCKWm4HXAGhfI8cIBN3Jgjtx3u5Wpj/7zamwI="
+ENVIRONMENT = "development"
+
+[env.staging]
+name = "data-analytics-api-staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "analytics-api-staging"
+database_id = "b47d8449-8491-496c-a70e-2d5531909ae1"  # Full UUID
+
+[env.staging.vars]
+JWT_SECRET = "MDi0xE8YVsSzw6YpjPorUHRIdvxjX9gTXSlIsGNCe/g="
+ENVIRONMENT = "staging"
+
+[env.production]
+name = "data-analytics-api-prod"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "analytics-api-production"
+database_id = "b0d30640-6935-48c7-8df8-da1bdbe643df"  # Full UUID
+
+[env.production.vars]
+JWT_SECRET = "Sc6CG6iPnXSy02n85U0qfTpVV50YekNpi7bkOEEfCxQ="
+ENVIRONMENT = "production"

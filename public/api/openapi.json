@@ -1,13 +1,13 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Data Science API",
-    "description": "Comprehensive API for Data Management, Data Analysis, Business Intelligence, Machine Learning, and Artificial Intelligence services <br><a href='mailto:Sibusiso.Ndzukuma@dsnresearch.co.za'>Send email to API Support</a>",
-    "version": "1.0.0",
+    "title": "Predictive Analytics API",
+    "description": "Comprehensive API for Data Management, Data Analysis, Business Intelligence, Machine Learning, and Artificial Intelligence services <br><a href='mailto:info@dsnresearch.co.za'>Send email to API Support</a>",
+    "version": "1.1.0",
     "contact": {
       "name": "API Support",
-      "email": "Sibusiso.Ndzukuma@dsnresearch.co.za",
-      "url": "https://www.dsnresearch.com"
+      "email": "info@dsnresearch.co.za",
+      "url": "https://dsnresearch.com"
     },
     "license": {
       "name": "MIT License",
@@ -18,11 +18,18 @@
     {
       "url": "https://data-analytics-api.sibusiso-ndzukuma.workers.dev",
       "description": "Production server"
+    },
+    {
+      "url": "http://127.0.0.1:8787",
+      "description": "Development server"
     }
   ],
   "security": [
     {
       "ApiKeyAuth": []
+    },
+    {
+      "BearerAuth": []
     }
   ],
   "components": {
@@ -32,27 +39,234 @@
         "in": "header",
         "name": "X-API-Key",
         "description": "API Key for authentication. Include in request header."
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token for authentication"
       }
     },
     "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { 
+            "type": "string",
+            "example": "An error occurred"
+          },
+          "code": { 
+            "type": "string",
+            "example": "ERROR_CODE"
+          },
+          "details": { 
+            "type": "object",
+            "additionalProperties": true
+          },
+          "success": { 
+            "type": "boolean", 
+            "example": false 
+          }
+        },
+        "required": ["error", "code", "success"]
+      },
+      "SignupRequest": {
+        "type": "object",
+        "properties": {
+          "companyName": { 
+            "type": "string", 
+            "minLength": 1,
+            "example": "Acme Corp",
+            "description": "Company or organization name"
+          },
+          "email": { 
+            "type": "string", 
+            "format": "email",
+            "example": "user@example.com",
+            "description": "Valid email address"
+          },
+          "password": { 
+            "type": "string", 
+            "minLength": 8,
+            "example": "SecurePass123!",
+            "description": "Password (minimum 8 characters)"
+          },
+          "plan": { 
+            "type": "string", 
+            "enum": ["free", "basic", "pro", "premium", "enterprise"],
+            "example": "free",
+            "default": "free",
+            "description": "Subscription plan tier"
+          },
+          "name": {
+            "type": "string",
+            "example": "John Doe",
+            "description": "User's full name"
+          }
+        },
+        "required": ["companyName", "email", "password"]
+      },
+      "SignupResponse": {
+        "type": "object",
+        "properties": {
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
+          "message": { 
+            "type": "string",
+            "example": "Account created successfully"
+          },
+          "apiKey": { 
+            "type": "string",
+            "example": "ak_1234567890abcdef"
+          },
+          "token": { 
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          },
+          "verifyEmailUrl": { 
+            "type": "string",
+            "format": "uri",
+            "example": "https://api.example.com/verify?token=abc123"
+          },
+          "clientId": { 
+            "type": "integer",
+            "example": 12345
+          },
+          "userId": { 
+            "type": "integer",
+            "example": 67890
+          },
+          "companyName": { 
+            "type": "string",
+            "example": "Acme Corp"
+          },
+          "plan": { 
+            "type": "string",
+            "example": "free"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": { 
+            "type": "string", 
+            "format": "email",
+            "example": "user@example.com"
+          },
+          "password": { 
+            "type": "string", 
+            "minLength": 8,
+            "example": "SecurePass123!"
+          }
+        },
+        "required": ["email", "password"]
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
+          "token": { 
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": { 
+                "type": "integer",
+                "example": 67890
+              },
+              "name": { 
+                "type": "string",
+                "example": "John Doe"
+              },
+              "email": { 
+                "type": "string",
+                "example": "user@example.com"
+              }
+            }
+          },
+          "client": {
+            "type": "object",
+            "properties": {
+              "id": { 
+                "type": "integer",
+                "example": 12345
+              },
+              "name": { 
+                "type": "string",
+                "example": "Acme Corp"
+              },
+              "plan": { 
+                "type": "string",
+                "example": "free"
+              }
+            }
+          },
+          "api_key": { 
+            "type": "string",
+            "example": "ak_1234567890abcdef"
+          }
+        }
+      },
       "Client": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "name": { "type": "string" },
-          "created_at": { "type": "string", "format": "date-time" }
+          "id": { 
+            "type": "integer",
+            "example": 12345
+          },
+          "name": { 
+            "type": "string",
+            "example": "Acme Corp"
+          },
+          "created_at": { 
+            "type": "string", 
+            "format": "date-time",
+            "example": "2025-01-15T10:30:00Z"
+          }
         },
         "required": ["id", "name", "created_at"]
       },
       "DataUploadRequest": {
         "type": "object",
         "properties": {
-          "source_name": { "type": "string", "example": "Sales Q3 Data" },
-          "source_type": { "type": "string", "enum": ["file", "database", "api", "stream"], "example": "file" },
+          "source_name": { 
+            "type": "string", 
+            "minLength": 1,
+            "example": "Sales Q3 Data",
+            "description": "Descriptive name for the data source"
+          },
+          "source_type": { 
+            "type": "string", 
+            "enum": ["file", "database", "api", "stream"], 
+            "example": "file",
+            "description": "Type of data source"
+          },
           "data_rows": {
             "type": "array",
-            "items": { "type": "object" },
-            "example": [{ "id": 1, "value": 100 }, { "id": 2, "value": 200 }]
+            "minItems": 1,
+            "items": { 
+              "type": "object",
+              "additionalProperties": true
+            },
+            "example": [
+              { "id": 1, "product": "Widget A", "sales": 1500, "date": "2025-07-01" }, 
+              { "id": 2, "product": "Widget B", "sales": 2300, "date": "2025-07-02" }
+            ],
+            "description": "Array of data objects to be stored"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "example": { "region": "South Africa", "currency": "ZAR" },
+            "description": "Optional metadata about the data source"
           }
         },
         "required": ["source_name", "source_type", "data_rows"]
@@ -60,63 +274,176 @@
       "DataUploadResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean" },
-          "message": { "type": "string" },
-          "source_id": { "type": "integer" }
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
+          "message": { 
+            "type": "string",
+            "example": "Data uploaded successfully"
+          },
+          "source_id": { 
+            "type": "integer",
+            "example": 789
+          },
+          "rows_inserted": {
+            "type": "integer",
+            "example": 2,
+            "description": "Number of rows successfully inserted"
+          }
         }
       },
       "DataSource": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "source_name": { "type": "string" },
-          "source_type": { "type": "string" },
-          "row_count": { "type": "integer" },
-          "last_ingested": { "type": "string", "format": "date-time" },
-          "created_at": { "type": "string", "format": "date-time" }
+          "id": { 
+            "type": "integer",
+            "example": 789
+          },
+          "source_name": { 
+            "type": "string",
+            "example": "Sales Q3 Data"
+          },
+          "source_type": { 
+            "type": "string",
+            "example": "file"
+          },
+          "row_count": { 
+            "type": "integer",
+            "example": 2
+          },
+          "last_ingested": { 
+            "type": "string", 
+            "format": "date-time",
+            "example": "2025-10-02T14:30:00Z"
+          },
+          "created_at": { 
+            "type": "string", 
+            "format": "date-time",
+            "example": "2025-09-15T09:00:00Z"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
         }
       },
       "DataSourcesResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean" },
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
           "data_sources": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/DataSource" }
+          },
+          "total_count": {
+            "type": "integer",
+            "example": 5,
+            "description": "Total number of data sources"
           }
         }
       },
       "AnalyticsQueryRequest": {
         "type": "object",
         "properties": {
-          "source_id": { "type": "integer" },
-          "analysis_type": { "type": "string", "enum": ["descriptive", "correlation", "trend"] },
-          "parameters": { "type": "object", "additionalProperties": true }
+          "source_id": { 
+            "type": "integer",
+            "example": 789,
+            "description": "ID of the data source to analyze"
+          },
+          "analysis_type": { 
+            "type": "string", 
+            "enum": ["descriptive", "correlation", "trend", "forecasting", "clustering"],
+            "example": "descriptive",
+            "description": "Type of analysis to perform"
+          },
+          "parameters": { 
+            "type": "object", 
+            "additionalProperties": true,
+            "example": {
+              "columns": ["sales", "revenue"],
+              "time_period": "last_30_days"
+            },
+            "description": "Analysis-specific parameters"
+          }
         },
         "required": ["source_id", "analysis_type"]
       },
       "AnalyticsQueryResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean" },
-          "job_id": { "type": "integer" },
-          "status": { "type": "string" },
-          "results": { "type": "object" }
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
+          "job_id": { 
+            "type": "integer",
+            "example": 456
+          },
+          "status": { 
+            "type": "string",
+            "enum": ["pending", "processing", "completed", "failed"],
+            "example": "pending"
+          },
+          "results": { 
+            "type": "object",
+            "description": "Analysis results (available when status is 'completed')"
+          },
+          "estimated_completion": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-10-02T15:00:00Z"
+          }
         }
       },
       "JobStatusResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean" },
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
           "job": {
             "type": "object",
             "properties": {
-              "id": { "type": "integer" },
-              "job_type": { "type": "string" },
-              "status": { "type": "string" },
-              "results": { "type": "object" },
-              "created_at": { "type": "string", "format": "date-time" },
-              "completed_at": { "type": "string", "format": "date-time" }
+              "id": { 
+                "type": "integer",
+                "example": 456
+              },
+              "job_type": { 
+                "type": "string",
+                "example": "analytics"
+              },
+              "status": { 
+                "type": "string",
+                "enum": ["pending", "processing", "completed", "failed"],
+                "example": "completed"
+              },
+              "results": { 
+                "type": "object",
+                "example": {
+                  "mean_sales": 1900,
+                  "total_revenue": 3800,
+                  "trend": "increasing"
+                }
+              },
+              "error_message": {
+                "type": "string",
+                "example": null
+              },
+              "created_at": { 
+                "type": "string", 
+                "format": "date-time",
+                "example": "2025-10-02T14:30:00Z"
+              },
+              "completed_at": { 
+                "type": "string", 
+                "format": "date-time",
+                "example": "2025-10-02T14:35:00Z"
+              }
             }
           }
         }
@@ -124,42 +451,108 @@
       "ModelListResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean" },
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
           "models": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "id": { "type": "integer" },
-                "model_name": { "type": "string" },
-                "model_type": { "type": "string" },
-                "version": { "type": "string" },
-                "is_active": { "type": "boolean" },
-                "created_at": { "type": "string", "format": "date-time" }
+                "id": { 
+                  "type": "integer",
+                  "example": 101
+                },
+                "model_name": { 
+                  "type": "string",
+                  "example": "Sales Forecaster v2"
+                },
+                "model_type": { 
+                  "type": "string",
+                  "enum": ["classification", "regression", "clustering", "time_series"],
+                  "example": "regression"
+                },
+                "version": { 
+                  "type": "string",
+                  "example": "2.1.0"
+                },
+                "is_active": { 
+                  "type": "boolean",
+                  "example": true
+                },
+                "accuracy": {
+                  "type": "number",
+                  "format": "float",
+                  "example": 0.92,
+                  "description": "Model accuracy score (0-1)"
+                },
+                "created_at": { 
+                  "type": "string", 
+                  "format": "date-time",
+                  "example": "2025-08-01T10:00:00Z"
+                }
               }
             }
+          },
+          "total_count": {
+            "type": "integer",
+            "example": 3
           }
         }
       },
       "PredictionRequest": {
         "type": "object",
         "properties": {
-          "model_id": { "type": "integer" },
-          "input_data": { "type": "object" }
+          "model_id": { 
+            "type": "integer",
+            "example": 101,
+            "description": "ID of the model to use for prediction"
+          },
+          "input_data": { 
+            "type": "object",
+            "additionalProperties": true,
+            "example": {
+              "product": "Widget A",
+              "month": "October",
+              "marketing_spend": 5000
+            },
+            "description": "Input features for prediction"
+          }
         },
         "required": ["model_id", "input_data"]
       },
       "PredictionResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean" },
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
           "prediction": {
             "type": "object",
             "properties": {
-              "model_id": { "type": "integer" },
-              "prediction": { "type": "string" },
-              "confidence": { "type": "number", "format": "float" },
-              "timestamp": { "type": "string", "format": "date-time" }
+              "model_id": { 
+                "type": "integer",
+                "example": 101
+              },
+              "prediction": { 
+                "type": "string",
+                "example": "2450"
+              },
+              "confidence": { 
+                "type": "number", 
+                "format": "float",
+                "minimum": 0,
+                "maximum": 1,
+                "example": 0.87,
+                "description": "Confidence score (0-1)"
+              },
+              "timestamp": { 
+                "type": "string", 
+                "format": "date-time",
+                "example": "2025-10-02T14:45:00Z"
+              }
             }
           }
         }
@@ -167,30 +560,119 @@
       "ReportGenerateRequest": {
         "type": "object",
         "properties": {
-          "report_type": { "type": "string" },
-          "parameters": { "type": "object", "additionalProperties": true }
+          "report_type": { 
+            "type": "string",
+            "enum": ["summary", "detailed", "executive", "technical"],
+            "example": "summary",
+            "description": "Type of report to generate"
+          },
+          "parameters": { 
+            "type": "object", 
+            "additionalProperties": true,
+            "example": {
+              "source_ids": [789, 790],
+              "date_range": {
+                "start": "2025-07-01",
+                "end": "2025-09-30"
+              },
+              "format": "pdf"
+            },
+            "description": "Report generation parameters"
+          }
         },
         "required": ["report_type"]
       },
       "ReportResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean" },
-          "report": { "type": "object" }
+          "success": { 
+            "type": "boolean",
+            "example": true
+          },
+          "report": { 
+            "type": "object",
+            "properties": {
+              "report_id": {
+                "type": "integer",
+                "example": 555
+              },
+              "report_type": {
+                "type": "string",
+                "example": "summary"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2025-10-02T15:00:00Z"
+              },
+              "download_url": {
+                "type": "string",
+                "format": "uri",
+                "example": "https://api.example.com/reports/download/555"
+              },
+              "data": {
+                "type": "object",
+                "additionalProperties": true,
+                "example": {
+                  "total_sales": 50000,
+                  "growth_rate": 15.3,
+                  "top_products": ["Widget A", "Widget B"]
+                }
+              }
+            }
+          }
         }
       },
       "HealthResponse": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "timestamp": { "type": "string", "format": "date-time" }
+          "status": { 
+            "type": "string",
+            "enum": ["healthy", "degraded", "unhealthy"],
+            "example": "healthy"
+          },
+          "timestamp": { 
+            "type": "string", 
+            "format": "date-time",
+            "example": "2025-10-02T14:00:00Z"
+          },
+          "database": { 
+            "type": "string",
+            "example": "connected",
+            "description": "Database connection status"
+          },
+          "version": { 
+            "type": "string",
+            "example": "1.1.0"
+          }
         }
       },
-      "ErrorResponse": {
+      "APIOverviewResponse": {
         "type": "object",
         "properties": {
-          "error": { "type": "string" },
-          "success": { "type": "boolean" }
+          "name": { 
+            "type": "string",
+            "example": "Predictive Analytics API"
+          },
+          "version": { 
+            "type": "string",
+            "example": "1.1.0"
+          },
+          "endpoints": { 
+            "type": "object",
+            "additionalProperties": true,
+            "example": {
+              "authentication": ["/api/signup", "/api/login"],
+              "data_management": ["/api/data/upload", "/api/data/sources"],
+              "analytics": ["/api/analytics/query", "/api/analytics/jobs/{jobId}"],
+              "machine_learning": ["/api/models/list", "/api/models/predict"],
+              "reporting": ["/api/reports/generate"]
+            }
+          },
+          "authentication": { 
+            "type": "string",
+            "example": "API Key or Bearer Token required"
+          }
         }
       }
     },
@@ -201,6 +683,75 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Authentication required",
+              "code": "UNAUTHORIZED",
+              "success": false
+            }
+          }
+        }
+      },
+      "RateLimitExceeded": {
+        "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Rate limit exceeded",
+              "code": "RATE_LIMIT_EXCEEDED",
+              "details": { "remaining": 0, "reset_at": "2025-10-02T15:00:00Z" },
+              "success": false
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Validation error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Invalid request data",
+              "code": "VALIDATION_ERROR",
+              "details": {
+                "fields": ["email is required", "password must be at least 8 characters"]
+              },
+              "success": false
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Resource not found",
+              "code": "NOT_FOUND",
+              "success": false
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "An unexpected error occurred",
+              "code": "INTERNAL_SERVER_ERROR",
+              "success": false
             }
           }
         }
@@ -212,7 +763,8 @@
       "get": {
         "tags": ["System"],
         "summary": "Health check",
-        "description": "Check if the API is running",
+        "description": "Check if the API is running and database connectivity",
+        "security": [],
         "responses": {
           "200": {
             "description": "API is healthy",
@@ -220,6 +772,22 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "API is unhealthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Service unavailable",
+                  "code": "SERVICE_UNAVAILABLE",
+                  "details": { "database": "disconnected" },
+                  "success": false
                 }
               }
             }
@@ -232,22 +800,153 @@
         "tags": ["Documentation"],
         "summary": "API Overview",
         "description": "Get list of available endpoints and usage info",
+        "security": [],
         "responses": {
           "200": {
             "description": "API metadata and endpoints",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": { "type": "string" },
-                    "version": { "type": "string" },
-                    "endpoints": { "type": "object" },
-                    "authentication": { "type": "string" }
+                  "$ref": "#/components/schemas/APIOverviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/signup": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Create new account",
+        "description": "Register a new client account and receive an API key",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              },
+              "examples": {
+                "freePlan": {
+                  "summary": "Free plan signup",
+                  "value": {
+                    "companyName": "Startup Inc",
+                    "email": "founder@startup.com",
+                    "password": "SecurePass123!",
+                    "plan": "free",
+                    "name": "Jane Founder"
+                  }
+                },
+                "proPlan": {
+                  "summary": "Pro plan signup",
+                  "value": {
+                    "companyName": "TechCorp LLC",
+                    "email": "admin@techcorp.com",
+                    "password": "SuperSecure456!",
+                    "plan": "pro",
+                    "name": "John Admin"
                   }
                 }
               }
             }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "409": {
+            "description": "User already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "An account with this email already exists",
+                  "code": "CONFLICT",
+                  "success": false
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          }
+        }
+      }
+    },
+    "/api/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "User login",
+        "description": "Authenticate user and receive JWT token",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid email or password",
+                  "code": "INVALID_CREDENTIALS",
+                  "success": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Email not verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Email address not verified",
+                  "code": "EMAIL_NOT_VERIFIED",
+                  "success": false
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -263,6 +962,20 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DataUploadRequest"
+              },
+              "examples": {
+                "salesData": {
+                  "summary": "Sales data upload",
+                  "value": {
+                    "source_name": "Q3 2025 Sales",
+                    "source_type": "file",
+                    "data_rows": [
+                      { "date": "2025-07-01", "product": "Widget A", "sales": 1500, "region": "North" },
+                      { "date": "2025-07-02", "product": "Widget B", "sales": 2300, "region": "South" }
+                    ],
+                    "metadata": { "currency": "USD", "fiscal_quarter": "Q3" }
+                  }
+                }
               }
             }
           }
@@ -279,17 +992,32 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "description": "Payload too large",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Request payload exceeds maximum size limit",
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "details": { "max_size": "10MB" },
+                  "success": false
                 }
               }
             }
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -299,6 +1027,26 @@
         "tags": ["Data Management"],
         "summary": "List all data sources",
         "description": "Get a list of all data sources for the authenticated client",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "default": 1 },
+            "description": "Page number for pagination"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
+            "description": "Number of items per page"
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["file", "database", "api", "stream"] },
+            "description": "Filter by source type"
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of data sources",
@@ -312,6 +1060,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -327,6 +1078,31 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AnalyticsQueryRequest"
+              },
+              "examples": {
+                "descriptiveAnalysis": {
+                  "summary": "Descriptive statistics",
+                  "value": {
+                    "source_id": 789,
+                    "analysis_type": "descriptive",
+                    "parameters": {
+                      "columns": ["sales", "revenue"],
+                      "statistics": ["mean", "median", "std"]
+                    }
+                  }
+                },
+                "trendAnalysis": {
+                  "summary": "Trend analysis",
+                  "value": {
+                    "source_id": 789,
+                    "analysis_type": "trend",
+                    "parameters": {
+                      "time_column": "date",
+                      "value_column": "sales",
+                      "period": "monthly"
+                    }
+                  }
+                }
               }
             }
           }
@@ -343,17 +1119,19 @@
             }
           },
           "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -368,8 +1146,9 @@
             "name": "jobId",
             "in": "path",
             "required": true,
-            "schema": { "type": "integer" },
-            "description": "ID of the job to retrieve"
+            "schema": { "type": "integer", "minimum": 1 },
+            "description": "ID of the job to retrieve",
+            "example": 456
           }
         ],
         "responses": {
@@ -383,18 +1162,14 @@
               }
             }
           },
-          "404": {
-            "description": "Job not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -404,6 +1179,20 @@
         "tags": ["Machine Learning"],
         "summary": "List available ML models",
         "description": "Get a list of active machine learning models",
+        "parameters": [
+          {
+            "name": "model_type",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["classification", "regression", "clustering", "time_series"] },
+            "description": "Filter by model type"
+          },
+          {
+            "name": "is_active",
+            "in": "query",
+            "schema": { "type": "boolean" },
+            "description": "Filter by active status"
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of ML models",
@@ -417,6 +1206,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -432,6 +1224,20 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PredictionRequest"
+              },
+              "examples": {
+                "salesPrediction": {
+                  "summary": "Sales forecast",
+                  "value": {
+                    "model_id": 101,
+                    "input_data": {
+                      "product": "Widget A",
+                      "month": "October",
+                      "marketing_spend": 5000,
+                      "previous_month_sales": 2100
+                    }
+                  }
+                }
               }
             }
           }
@@ -448,17 +1254,19 @@
             }
           },
           "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -474,6 +1282,23 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ReportGenerateRequest"
+              },
+              "examples": {
+                "executiveSummary": {
+                  "summary": "Executive summary report",
+                  "value": {
+                    "report_type": "executive",
+                    "parameters": {
+                      "source_ids": [789, 790],
+                      "date_range": {
+                        "start": "2025-07-01",
+                        "end": "2025-09-30"
+                      },
+                      "format": "pdf",
+                      "include_charts": true
+                    }
+                  }
+                }
               }
             }
           }
@@ -490,20 +1315,52 @@
             }
           },
           "400": {
-            "description": "Missing required fields",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "System",
+      "description": "System health and monitoring endpoints"
+    },
+    {
+      "name": "Documentation",
+      "description": "API documentation and information"
+    },
+    {
+      "name": "Authentication",
+      "description": "User authentication and account management"
+    },
+    {
+      "name": "Data Management",
+      "description": "Data ingestion and source management"
+    },
+    {
+      "name": "Data Analysis",
+      "description": "Analytics and statistical operations"
+    },
+    {
+      "name": "Machine Learning",
+      "description": "ML model management and predictions"
+    },
+    {
+      "name": "Business Intelligence",
+      "description": "Report generation and insights"
+    }
+  ]
 }
