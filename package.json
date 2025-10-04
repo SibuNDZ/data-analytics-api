@@ -29,7 +29,7 @@
     "check": "tsc && wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "dev": "pnpm seedLocalD1 && wrangler dev",
-    "predeploy": "wrangler d1 migrations apply DB --remote",
+    "predeploy": "echo \"Skipping remote D1 migrations\"",
     "seedLocalD1": "wrangler d1 migrations apply DB --local",
     "test": "echo \"No tests yet. Skipping...\" && exit 0"
   },
