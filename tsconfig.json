@@ -5,7 +5,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "types": ["./worker-configuration.d.ts"],
-    "noEmit": true,
+    "noEmit": false,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
