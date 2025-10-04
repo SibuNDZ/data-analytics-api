@@ -1269,6 +1269,56 @@ const getOpenApiSpec = (request: Request): any => {
   };
 };
 
+async function handleModelPredict(request: Request, env: Env, user: User, apiKey: ApiKey): Promise<Response> {
+  const startTime = Date.now();
+  
+  try {
+    const validation = await validateRequest(request, {
+      model_id: 'number',
+      input_data: 'object'
+    });
+
+    if (!validation.valid) {
+      await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/models/predict', 'POST', 400, Date.now() - startTime);
+      return ResponseHelper.errorResponse(
+        'Missing required fields: model_id, input_data',
+        'VALIDATION_ERROR',
+        validation.errors,
+        400,
+        env
+      );
+    }
+
+    const body = validation.data as { model_id: number; input_data: { x: number } };
+    const { model_id: modelId, input_data: inputData } = body;
+
+    // Simple linear regression: y = mx + b
+    // Using mock coefficients for demo (in production, fetch from ml_models table)
+    const slope = 2.5;
+    const intercept = 10;
+    const prediction = slope * inputData.x + intercept;
+
+    const result = {
+      model_id: modelId,
+      prediction: prediction,
+      confidence: 0.85 + Math.random() * 0.1, // Mock confidence score
+      input: inputData,
+      timestamp: new Date().toISOString()
+    };
+
+    await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/models/predict', 'POST', 200, Date.now() - startTime);
+
+    return ResponseHelper.jsonResponse({
+      success: true,
+      prediction: result
+    }, 200, env);
+  } catch (error) {
+    console.error('Prediction error:', error);
+    await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/models/predict', 'POST', 500, Date.now() - startTime);
+    return ResponseHelper.errorResponse('Failed to generate prediction', 'PREDICTION_ERROR', null, 500, env);
+  }
+}
+
 // ================= MAIN REQUEST HANDLER =================
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const config = Config.validate(env);
@@ -1318,35 +1368,38 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     return ResponseHelper.jsonResponse(getOpenApiSpec(request), 200, config);
   }
 
-  // Authenticated endpoints
-  if (path.startsWith('/api/') && !['/api/signup', '/api/login', '/api/verify-email'].includes(path)) {
-    const authResult = await authenticate(request, config);
-    if (!authResult) {
-      return ResponseHelper.errorResponse('Authentication required', 'UNAUTHORIZED', null, 401, config);
-    }
-
-    const { user, apiKey } = authResult;
-
-    // Route to appropriate handler
-    switch (path) {
-      case '/api/data/upload':
-        if (request.method === 'POST') return handleDataUpload(request, config, user, apiKey);
-        break;
-      case '/api/data/sources':
-        if (request.method === 'GET') return handleDataSources(request, config, user, apiKey);
-        break;
-      // Add other handlers here as you implement them
-      default:
-        if (path.startsWith('/api/analytics/jobs/') && request.method === 'GET') {
-          const jobId = path.split('/').pop();
-          if (jobId) {
-            // return handleJobStatus(request, config, user, apiKey, jobId);
-          }
-        }
-    }
-
-    return ResponseHelper.errorResponse('Endpoint not found', 'NOT_FOUND', null, 404, config);
+// Authenticated endpoints
+if (path.startsWith('/api/') && !['/api/signup', '/api/login', '/api/verify-email'].includes(path)) {
+  const authResult = await authenticate(request, config);
+  if (!authResult) {
+    return ResponseHelper.errorResponse('Authentication required', 'UNAUTHORIZED', null, 401, config);
   }
+
+  const { user, apiKey } = authResult;
+
+  // Route to appropriate handler
+  switch (path) {
+    case '/api/data/upload':
+      if (request.method === 'POST') return handleDataUpload(request, config, user, apiKey);
+      break;
+    case '/api/data/sources':
+      if (request.method === 'GET') return handleDataSources(request, config, user, apiKey);
+      break;
+    case '/api/models/predict':
+      if (request.method === 'POST') return handleModelPredict(request, config, user, apiKey);
+      break;
+    // Add other handlers here as you implement them
+    default:
+      if (path.startsWith('/api/analytics/jobs/') && request.method === 'GET') {
+        const jobId = path.split('/').pop();
+        if (jobId) {
+          // return handleJobStatus(request, config, user, apiKey, jobId);
+        }
+      }
+  }
+
+  return ResponseHelper.errorResponse('Endpoint not found', 'NOT_FOUND', null, 404, config);
+}
 
   // Root endpoint
   if (path === '/' || path === '/api') {
