@@ -5,7 +5,7 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "analytics-db"
-database_id = "66633e74a-4928-4bc2-96b9-e57022079169"  # Copy the full UUID from your dashboard
+database_id = "6633e74a-4928-4bc2-96b9-e57022079169"  # Copy the full UUID from your dashboard
 
 [vars]
 JWT_SECRET = "5XBCREFCKWm4HXAGhfI8cIBN3Jgjtx3u5Wpj/7zamwI="
