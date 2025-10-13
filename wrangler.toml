@@ -1,20 +1,16 @@
 name = "data-analytics-api"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-10-04"
 
-# ❌ REMOVE these top-level bindings — they cause conflicts
-# [ai]
-# binding = "AI"
-# 
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "analytics-db"
-# database_id = "6633e74a-4928-4bc2-96b9-e57022079169"
+# --- Global Bindings ---
+[[d1_databases]]
+binding = "DB"
+database_name = "analytics-db"
+database_id = "6633e74a-4928-4bc2-96b9-e5702207919"
 
-# ✅ Keep top-level vars only if needed for local dev
-[vars]
-JWT_SECRET = "5XBCREFCKWm4HXAGhfI8cIBN3Jgjtx3u5Wpj/7zamwI="
-ENVIRONMENT = "development"
+[ai]
+binding = "AI"
+remote = true  # Optional: silences remote resource warning
 
 # --- Staging Environment ---
 [env.staging]
@@ -23,6 +19,7 @@ compatibility_date = "2025-10-04"
 
 [env.staging.ai]
 binding = "AI"
+remote = true
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -30,23 +27,23 @@ database_name = "analytics-api-staging"
 database_id = "b47d8449-8491-496c-a70e-2d5531909ae1"
 
 [env.staging.vars]
-JWT_SECRET = "MDi0xE8YVsSzw6YpjPorUHRIdvxjX9gTXSlIsGNCe/g="
 ENVIRONMENT = "staging"
+PAYPAL_MODE = "sandbox" # ✅ Safe to commit (just tells which mode to use)
 
 # --- Production Environment ---
 [env.production]
-name = "data-analytics-api-prod"
+name = "data-analytics-api-production"
 compatibility_date = "2025-10-04"
 
 [env.production.ai]
 binding = "AI"
+remote = true
 
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "analytics-api-production"
-database_id = "b0d30640-6935-48c7-8df8-da1bdbe643df"
+database_id = "b0d30640-6935-48c7-..."  # ← Use full UUID from screenshot
 
 [env.production.vars]
-JWT_SECRET = "Sc6CG6iPnXSy02n85U0qfTpVV50YekNpi7bkOEEfCxQ="
 ENVIRONMENT = "production"
-
+PAYPAL_MODE = "live"
