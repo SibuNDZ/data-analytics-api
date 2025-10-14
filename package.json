@@ -24,18 +24,21 @@
     "typescript": "5.8.3",
     "wrangler": "4.21.x"
   },
-  "scripts": {
-    "cf-typegen": "wrangler types",
-    "check": "tsc && wrangler deploy --dry-run",
-    "deploy": "wrangler deploy",
-    "dev": "pnpm seedLocalD1 && wrangler dev",
-    "predeploy": "echo \"Skipping remote D1 migrations\"",
-    "seedLocalD1": "wrangler d1 migrations apply DB --local",
-    "test": "echo \"No tests yet. Skipping...\" && exit 0",
-    "build": "tsc && wrangler build",
-    "deploy:prod": "wrangler deploy --env production"
-  },
+ "scripts": {
+  "cf-typegen": "wrangler types",
+  "check": "tsc && wrangler deploy --dry-run",
+  "deploy": "wrangler deploy",
+  "dev": "npm run seedLocalD1 && wrangler dev",
+  "predeploy": "echo \"Skipping remote D1 migrations\"",
+  "seedLocalD1": "wrangler d1 migrations apply DB --local",
+  "test": "echo \"No tests yet. Skipping...\" && exit 0",
+  "build": "tsc && wrangler build",
+  "lint": "tsc --noEmit",
+  "deploy:staging": "wrangler deploy --env staging",
+  "deploy:prod": "wrangler deploy --env production"
+},
   "dependencies": {
     "@hono/swagger-ui": "^0.5.2"
   }
 }
+

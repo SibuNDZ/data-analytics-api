@@ -6,7 +6,7 @@ compatibility_date = "2025-10-04"
 [[d1_databases]]
 binding = "DB"
 database_name = "analytics-db"
-database_id = "6633e74a-4928-4bc2-96b9-e5702207919"
+database_id = "6633e74a-4928-4bc2-96b9-e57022079169"
 
 [ai]
 binding = "AI"
@@ -24,7 +24,7 @@ remote = true
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "analytics-api-staging"
-database_id = "b47d8449-8491-496c-a70e-2d5531909ae1"
+database_id = "b066c93d-ae1c-41a0-8b67-3dd3fdf40e61"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
@@ -42,7 +42,7 @@ remote = true
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "analytics-api-production"
-database_id = "b0d30640-6935-48c7-..."  # ← Use full UUID from screenshot
+database_id = "d6fcbd8e-b005-4d75-8a00-08504b8c53d1"  # ← Use full UUID from screenshot
 
 [env.production.vars]
 ENVIRONMENT = "production"
