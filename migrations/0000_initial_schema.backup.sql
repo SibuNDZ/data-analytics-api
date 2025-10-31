@@ -1,4 +1,4 @@
--- Initial schema for Data Analytics API (Updated to match code)
+-- Initial schema for Data Analytics API 
 
 -- Enhanced User Management with consistent schema
 CREATE TABLE IF NOT EXISTS clients (
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS clients (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Subscription Plans
+-- Subscription Plans (Defined before 'users' to allow foreign key reference)
 CREATE TABLE IF NOT EXISTS subscription_plans (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   plan_id TEXT UNIQUE NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Users table - UPDATED to use subscription_status instead of plan_id to match code
+-- Users table now references subscription_plans
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   client_id INTEGER NOT NULL,
@@ -34,22 +34,21 @@ CREATE TABLE IF NOT EXISTS users (
   salt_hex TEXT NOT NULL,
   name TEXT NOT NULL DEFAULT '',
   company TEXT,
-  subscription_status TEXT DEFAULT 'pending',  -- Changed from plan_id to match code
-  paypal_subscription_id TEXT,
+  plan_id TEXT DEFAULT 'free', -- Changed from subscription_status
   email_verified INTEGER DEFAULT 0,
   is_active INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_login_at DATETIME,
-  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  FOREIGN KEY (plan_id) REFERENCES subscription_plans(plan_id) -- Added foreign key relationship
 );
 
--- Enhanced API Keys - ADDED key_salt_hex column to match code
+-- Enhanced API Keys with Advanced Features
 CREATE TABLE IF NOT EXISTS api_keys (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   key_id TEXT UNIQUE NOT NULL,
   key_hash TEXT NOT NULL,
-  key_salt_hex TEXT NOT NULL,  -- ADDED this column
   user_id INTEGER NOT NULL,
   name TEXT NOT NULL DEFAULT 'Default Key',
   permissions TEXT DEFAULT 'read',
@@ -123,7 +122,7 @@ CREATE TABLE IF NOT EXISTS api_usage (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Billing History
+-- Billing History (Updated for USD)
 CREATE TABLE IF NOT EXISTS billing_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -139,7 +138,7 @@ CREATE TABLE IF NOT EXISTS billing_history (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Payments Table
+-- Payments Table for individual transaction logging
 CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -153,17 +152,6 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
-);
-
--- Password Reset Tokens
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
-  token TEXT NOT NULL UNIQUE,
-  expires_at TEXT NOT NULL,
-  used INTEGER DEFAULT 0,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Rate Limiting Tracking
@@ -190,9 +178,8 @@ CREATE INDEX IF NOT EXISTS idx_ml_models_client_id ON ml_models(client_id);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(provider_order_id);
 CREATE INDEX IF NOT EXISTS idx_billing_history_user_id ON billing_history(user_id);
-CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
 
--- Insert default subscription plans
+-- Insert default subscription plans (USD pricing)
 INSERT OR IGNORE INTO subscription_plans (
   plan_id,
   name,

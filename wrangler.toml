@@ -1,3 +1,5 @@
+# wrangler.toml
+
 name = "data-analytics-api"
 main = "src/index.ts"
 compatibility_date = "2025-10-04"
@@ -5,12 +7,24 @@ compatibility_date = "2025-10-04"
 # --- Global Bindings ---
 [[d1_databases]]
 binding = "DB"
-database_name = "analytics-db"
+database_name = "analytics-api-production"
 database_id = "6633e74a-4928-4bc2-96b9-e57022079169"
 
 [ai]
 binding = "AI"
-remote = true  # Optional: silences remote resource warning
+remote = true
+
+# --- Default/Development Environment Variables ---
+[vars]
+ENVIRONMENT = "development"
+FRONTEND_URL = "http://localhost:3000"
+ALLOWED_ORIGINS = "http://localhost:3000,http://localhost:5173"
+PAYPAL_MODE = "sandbox"
+PAYFAST_MODE = "sandbox"
+
+# ✅ ADD THIS: Cron trigger for development (every minute for testing)
+[triggers]
+crons = ["* * * * *"]
 
 # --- Staging Environment ---
 [env.staging]
@@ -28,11 +42,18 @@ database_id = "b066c93d-ae1c-41a0-8b67-3dd3fdf40e61"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-PAYPAL_MODE = "sandbox" # ✅ Safe to commit (just tells which mode to use)
+FRONTEND_URL = "https://staging.dsnresearch.com"
+ALLOWED_ORIGINS = "https://staging.dsnresearch.com"
+PAYPAL_MODE = "sandbox"
+PAYFAST_MODE = "sandbox"
+
+# ✅ ADD THIS: Cron trigger for staging (every 2 minutes)
+[env.staging.triggers]
+crons = ["*/2 * * * *"]
 
 # --- Production Environment ---
 [env.production]
-name = "data-analytics-api-production"
+name = "data-analytics-api-prod"
 compatibility_date = "2025-10-04"
 
 [env.production.ai]
@@ -42,8 +63,20 @@ remote = true
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "analytics-api-production"
-database_id = "d6fcbd8e-b005-4d75-8a00-08504b8c53d1"  # ← Use full UUID from screenshot
+database_id = "d6fcbd8e-b005-4d75-8a00-08504b8c53d1"
 
 [env.production.vars]
 ENVIRONMENT = "production"
+FRONTEND_URL = "https://dsnresearch.com"
+ALLOWED_ORIGINS = "https://dsnresearch.com"
 PAYPAL_MODE = "live"
+PAYFAST_MODE = "live"
+
+# ✅ ADD THIS: Cron trigger for production (every 5 minutes)
+[env.production.triggers]
+crons = ["*/5 * * * *"]
+
+# Enables logging for production
+[env.production.observability]
+logs.enabled = true
+logs.persist = true

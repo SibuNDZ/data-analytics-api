@@ -1,3 +1,4 @@
+// src/index.ts
 // ================= CONSTANTS =================
 const CONSTANTS = {
   PBKDF2_ITERATIONS: 100000,
@@ -8,7 +9,13 @@ const CONSTANTS = {
   MAX_REQUEST_SIZE: 10 * 1024 * 1024, // 10MB
   VALID_PLANS: ['free', 'basic', 'pro', 'premium', 'enterprise'] as const,
 } as const;
-
+// ================= PLAN PRICING (SERVER-SIDE) =================
+const PLAN_PRICES: Record<string, string> = {
+  'basic': '15.00',
+  'pro': '49.00',
+  'premium': '99.00',
+  'enterprise': '199.00',
+} as const;
 // ================= TYPE DEFINITIONS =================
 export interface Env {
   AI: any;
@@ -17,7 +24,7 @@ export interface Env {
   ENVIRONMENT?: string;
   ALLOWED_ORIGINS?: string;
   RESEND_API_KEY: string;
-
+  FRONTEND_URL: string; // ← NEW: for email links
   // PayFast Configuration
   PAYFAST_MERCHANT_ID: string;
   PAYFAST_MERCHANT_KEY: string;
@@ -136,34 +143,34 @@ class EmailService {
         <div style="background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); padding: 40px 30px; text-align: center;">
           <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Welcome to DSN Analytics!</h1>
         </div>
-        
+
         <div style="padding: 40px 30px;">
           <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
             Hi ${name},
           </p>
-          
+
           <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
             Thank you for signing up! We're excited to have you on board. To get started with your predictive analytics API, please verify your email address by clicking the button below:
           </p>
-          
+
           <div style="text-align: center; margin: 40px 0;">
             <a href="${verificationLink}" style="display: inline-block; background-color: #3b82f6; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; transition: background-color 0.3s;">
               Verify Email Address
             </a>
           </div>
-          
+
           <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin-top: 30px;">
             Or copy and paste this link into your browser:
           </p>
           <p style="color: #3b82f6; font-size: 14px; word-break: break-all; background-color: #f3f4f6; padding: 12px; border-radius: 6px;">
             ${verificationLink}
           </p>
-          
+
           <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin-top: 30px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
             <strong>This link will expire in 24 hours.</strong> If you didn't create an account, you can safely ignore this email.
           </p>
         </div>
-        
+
         <div style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
           <p style="color: #6b7280; font-size: 14px; margin: 0;">
             DSN Analytics - Predictive Analytics API
@@ -192,36 +199,36 @@ class EmailService {
         <div style="background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); padding: 40px 30px; text-align: center;">
           <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Password Reset Request</h1>
         </div>
-        
+
         <div style="padding: 40px 30px;">
           <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
             Hi ${name},
           </p>
-          
+
           <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
             We received a request to reset your password for your DSN Analytics account. Click the button below to create a new password:
           </p>
-          
+
           <div style="text-align: center; margin: 40px 0;">
             <a href="${resetLink}" style="display: inline-block; background-color: #3b82f6; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; transition: background-color 0.3s;">
               Reset Password
             </a>
           </div>
-          
+
           <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin-top: 30px;">
             Or copy and paste this link into your browser:
           </p>
           <p style="color: #3b82f6; font-size: 14px; word-break: break-all; background-color: #f3f4f6; padding: 12px; border-radius: 6px;">
             ${resetLink}
           </p>
-          
+
           <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin-top: 30px; border-radius: 4px;">
             <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.6;">
               <strong>⚠️ Security Note:</strong> This link will expire in 1 hour. If you didn't request a password reset, please ignore this email or contact support if you have concerns.
             </p>
           </div>
         </div>
-        
+
         <div style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
           <p style="color: #6b7280; font-size: 14px; margin: 0;">
             DSN Analytics - Predictive Analytics API
@@ -545,24 +552,44 @@ class JWTManager {
     try {
       const [encodedHeader, encodedPayload, signature] = token.split('.');
       if (!encodedHeader || !encodedPayload || !signature) return null;
+
       const signingKey = await this.createHmacSigningKey(secret);
       const encoder = new TextEncoder();
-      const dataToSign = encoder.encode(`${encodedHeader}.${encodedPayload}`);
-      const signatureBuffer = await crypto.subtle.sign('HMAC', signingKey, dataToSign);
-      const signatureArray = new Uint8Array(signatureBuffer);
-      let binary = '';
-      for (let i = 0; i < signatureArray.length; i++) {
-        binary += String.fromCharCode(signatureArray[i]);
+      const dataToVerify = encoder.encode(`${encodedHeader}.${encodedPayload}`);
+
+      // --- START FIX ---
+      // 1. Decode the signature from Base64URL to an ArrayBuffer
+      let signatureStr = signature.replace(/-/g, '+').replace(/_/g, '/');
+      while (signatureStr.length % 4) {
+        signatureStr += '=';
       }
-      const expectedSignature = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-      if (!Security.timingSafeEqual(signature, expectedSignature)) {
+      const binary = atob(signatureStr);
+      const signatureBuffer = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        signatureBuffer[i] = binary.charCodeAt(i);
+      }
+
+      // 2. Use crypto.subtle.verify (the correct way to check a signature)
+      const isValid = await crypto.subtle.verify(
+        'HMAC',
+        signingKey,
+        signatureBuffer,
+        dataToVerify
+      );
+      // --- END FIX ---
+
+      if (!isValid) {
+        console.log('JWT verification failed: Invalid signature');
         return null;
       }
+
       const payload = JSON.parse(this.base64UrlDecode(encodedPayload));
       if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+        console.log('JWT verification failed: Token expired');
         return null;
       }
-      return payload;
+      
+      return payload; // Success!
     } catch (e) {
       console.error('JWT verification error:', e);
       return null;
@@ -573,29 +600,43 @@ class JWTManager {
 // ================= CONFIGURATION & VALIDATION =================
 class Config {
   static validate(env: any): Env {
-    if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) throw new Error('JWT_SECRET must be at least 32 characters');
-    if (!env.DB) throw new Error('DB binding is required');
-    if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is required');
-    if (!env.PAYFAST_MERCHANT_ID) throw new Error('PAYFAST_MERCHANT_ID is required');
-    if (!env.PAYFAST_MERCHANT_KEY) throw new Error('PAYFAST_MERCHANT_KEY is required');
-    if (!env.PAYFAST_PASSPHRASE) throw new Error('PAYFAST_PASSPHRASE is required');
-    if (!env.PAYPAL_CLIENT_ID) throw new Error('PAYPAL_CLIENT_ID is required');
-    if (!env.PAYPAL_CLIENT_SECRET) throw new Error('PAYPAL_CLIENT_SECRET is required');
-    if (!env.PAYPAL_WEBHOOK_ID) throw new Error('PAYPAL_WEBHOOK_ID is required');
+    // Critical credentials that must exist for API to work
+    if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) {
+      throw new Error('JWT_SECRET must be at least 32 characters');
+    }
+    if (!env.DB) {
+      throw new Error('DB binding is required');
+    }
+    if (!env.RESEND_API_KEY) {
+      throw new Error('RESEND_API_KEY is required for email functionality');
+    }
+    // Optional payment credentials - warn if missing but don't block startup
+    const warnings: string[] = [];
+    if (!env.PAYFAST_MERCHANT_ID || !env.PAYFAST_MERCHANT_KEY || !env.PAYFAST_PASSPHRASE) {
+      warnings.push('⚠️ PayFast credentials incomplete - PayFast payments will be unavailable');
+    }
+    if (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET || !env.PAYPAL_WEBHOOK_ID) {
+      warnings.push('⚠️ PayPal credentials incomplete - PayPal payments will be unavailable');
+    }
+    // Log warnings but don't throw errors
+    warnings.forEach(warning => console.warn(warning));
     return {
       AI: env.AI,
       DB: env.DB,
       JWT_SECRET: env.JWT_SECRET,
       ENVIRONMENT: env.ENVIRONMENT || 'development',
       ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '*',
+      FRONTEND_URL: env.FRONTEND_URL || 'http://localhost:3000',
       RESEND_API_KEY: env.RESEND_API_KEY,
-      PAYFAST_MERCHANT_ID: env.PAYFAST_MERCHANT_ID,
-      PAYFAST_MERCHANT_KEY: env.PAYFAST_MERCHANT_KEY,
-      PAYFAST_PASSPHRASE: env.PAYFAST_PASSPHRASE,
+      // PayFast credentials - allow empty strings if not configured
+      PAYFAST_MERCHANT_ID: env.PAYFAST_MERCHANT_ID || '',
+      PAYFAST_MERCHANT_KEY: env.PAYFAST_MERCHANT_KEY || '',
+      PAYFAST_PASSPHRASE: env.PAYFAST_PASSPHRASE || '',
       PAYFAST_MODE: env.PAYFAST_MODE || 'sandbox',
-      PAYPAL_CLIENT_ID: env.PAYPAL_CLIENT_ID,
-      PAYPAL_CLIENT_SECRET: env.PAYPAL_CLIENT_SECRET,
-      PAYPAL_WEBHOOK_ID: env.PAYPAL_WEBHOOK_ID,
+      // PayPal credentials - allow empty strings if not configured
+      PAYPAL_CLIENT_ID: env.PAYPAL_CLIENT_ID || '',
+      PAYPAL_CLIENT_SECRET: env.PAYPAL_CLIENT_SECRET || '',
+      PAYPAL_WEBHOOK_ID: env.PAYPAL_WEBHOOK_ID || '',
       PAYPAL_MODE: env.PAYPAL_MODE || 'sandbox',
     };
   }
@@ -604,17 +645,51 @@ class Config {
 // ================= RATE LIMITING =================
 class RateLimiter {
   static async checkRateLimit(env: Env, apiKey: string, maxRequests: number = CONSTANTS.RATE_LIMIT_MAX_REQUESTS): Promise<{ allowed: boolean; remaining: number; resetAt: string }> {
-    const result = await env.DB.prepare(`SELECT COUNT(*) as count FROM api_usage WHERE key_id = ? AND timestamp > datetime('now', '-1 hour')`).bind(apiKey).first<{ count: number }>();
+    // First, get the client_id from the API key to fetch the correct daily limit.
+    const keyRecord = await env.DB.prepare(`
+      SELECT user_id FROM api_keys WHERE key_id = ? AND is_active = 1
+    `).bind(apiKey).first<{ user_id: number }>();
+    if (!keyRecord) {
+      return { allowed: false, remaining: 0, resetAt: new Date().toISOString() };
+    }
+
+    const client = await env.DB.prepare(`
+      SELECT max_daily_requests FROM clients WHERE id = (
+        SELECT client_id FROM users WHERE id = ?
+      )
+    `).bind(keyRecord.user_id).first<{ max_daily_requests: number }>();
+    
+    if (!client || !client.max_daily_requests) {
+      // Fallback to the old global limit if no specific limit is found.
+      maxRequests = CONSTANTS.RATE_LIMIT_MAX_REQUESTS;
+    } else {
+      maxRequests = client.max_daily_requests;
+    }
+
+    // Now, count the requests for today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0); // Start of today
+
+    const result = await env.DB.prepare(`
+      SELECT COUNT(*) as count 
+      FROM api_usage 
+      WHERE key_id = ? AND timestamp >= ?
+    `).bind(apiKey, todayStart.toISOString()).first<{ count: number }>();
+
     const count = result?.count || 0;
     const allowed = count < maxRequests;
     const remaining = Math.max(0, maxRequests - count);
-    const resetAt = new Date(Date.now() + CONSTANTS.RATE_LIMIT_WINDOW_MS).toISOString();
+    // Reset at start of next day
+    const nextDay = new Date(todayStart);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const resetAt = nextDay.toISOString();
+
     return { allowed, remaining, resetAt };
   }
 
   static async recordUsage(env: Env, keyId: string, userId: number, endpoint: string, method: string, statusCode: number, responseTime: number): Promise<void> {
     try {
-      await env.DB.prepare(`INSERT INTO api_usage (key_id, user_id, endpoint, method, status_code, response_time_ms, timestamp) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`).bind(keyId, userId, endpoint, method, statusCode, responseTime).run();
+      await env.DB.prepare(`INSERT INTO api_usage (key_id, user_id, endpoint, method, status_code, response_time_ms, timestamp) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`).bind(keyId, userId, endpoint, method, statusCode, responseTime).run();
     } catch (error) {
       console.error('Failed to record API usage:', error);
     }
@@ -683,22 +758,82 @@ async function authenticate(request: Request, env: Env): Promise<AuthResult | nu
   const apiKey = request.headers.get('X-API-Key') || request.headers.get('Authorization')?.replace('Bearer ', '').trim();
   if (!apiKey) return null;
   try {
-    const result = await env.DB.prepare(`SELECT u.*, c.id as client_id, c.name as client_name, c.api_key as client_api_key, c.plan as client_plan, k.id as key_internal_id, k.key_id, k.key_hash, k.permissions, k.rate_limit, k.is_active as key_is_active, k.expires_at FROM api_keys k JOIN users u ON u.id = k.user_id JOIN clients c ON c.id = u.client_id WHERE k.key_id = ? AND k.is_active = 1 AND u.is_active = 1`).bind(apiKey).first();
-    if (!result) return null;
+    // Step 1: Fetch only the hash and salt for the API key first.
+    const keyRecord = await env.DB.prepare(`
+      SELECT key_hash, key_salt_hex, user_id, is_active
+      FROM api_keys
+      WHERE key_id = ? AND is_active = 1
+    `).bind(apiKey).first<{ key_hash: string; key_salt_hex: string; user_id: number; is_active: 0 | 1 }>();
+    if (!keyRecord) {
+      console.log('API key not found or inactive');
+      return null;
+    }
+    // Step 2: Verify the provided API key against the stored hash and salt.
+    const isValid = await PasswordHasher.verifyPassword(apiKey, keyRecord.key_salt_hex, keyRecord.key_hash);
+    if (!isValid) {
+      console.log('API key verification failed');
+      return null;
+    }
+    // Step 3: If valid, proceed to fetch the full user/client details.
+    const result = await env.DB.prepare(`
+      SELECT u.*, c.id as client_id, c.name as client_name, c.api_key as client_api_key, c.plan as client_plan,
+             k.id as key_internal_id, k.key_id, k.key_hash, k.permissions, k.rate_limit, k.is_active as key_is_active, k.expires_at
+      FROM api_keys k
+      JOIN users u ON u.id = k.user_id
+      JOIN clients c ON c.id = u.client_id
+      WHERE k.key_id = ? AND k.is_active = 1 AND u.is_active = 1
+    `).bind(apiKey).first();
+    if (!result) {
+      console.log('Full user/client record not found after key verification');
+      return null;
+    }
     if (result.expires_at && typeof result.expires_at === 'string' && new Date(result.expires_at) < new Date()) {
+      console.log('API key expired');
       return null;
     }
     const keyParts = apiKey.split('_');
     if (keyParts.length !== 2 || keyParts[0] !== 'dsn') {
+      console.log('Invalid API key format');
       return null;
     }
-    const user: User = { id: Number(result.id), email: String(result.email), name: String(result.name), company: result.company ? String(result.company) : null, subscription_status: String(result.subscription_status), created_at: String(result.created_at), updated_at: String(result.updated_at), last_login_at: result.last_login_at ? String(result.last_login_at) : null, email_verified: Number(result.email_verified) as 0 | 1, is_active: Number(result.is_active) as 0 | 1, client_id: Number(result.client_id) };
-    const client: Client = { id: Number(result.client_id), name: String(result.client_name), api_key: String(result.client_api_key), plan: String(result.client_plan), created_at: String(result.created_at) };
-    const apiKeyData: ApiKey = { id: Number(result.key_internal_id), key_id: String(result.key_id), key_hash: String(result.key_hash), user_id: Number(result.id), permissions: String(result.permissions), rate_limit: Number(result.rate_limit) || CONSTANTS.RATE_LIMIT_MAX_REQUESTS, is_active: Number(result.key_is_active) as 0 | 1 };
+    const user: User = {
+      id: Number(result.id),
+      email: String(result.email),
+      name: String(result.name),
+      company: result.company ? String(result.company) : null,
+      subscription_status: String(result.subscription_status),
+      created_at: String(result.created_at),
+      updated_at: String(result.updated_at),
+      last_login_at: result.last_login_at ? String(result.last_login_at) : null,
+      email_verified: Number(result.email_verified) as 0 | 1,
+      is_active: Number(result.is_active) as 0 | 1,
+      client_id: Number(result.client_id)
+    };
+    const client: Client = {
+      id: Number(result.client_id),
+      name: String(result.client_name),
+      api_key: String(result.client_api_key),
+      plan: String(result.client_plan),
+      created_at: String(result.created_at)
+    };
+    const apiKeyData: ApiKey = {
+      id: Number(result.key_internal_id),
+      key_id: String(result.key_id),
+      key_hash: String(result.key_hash),
+      user_id: Number(result.id),
+      permissions: String(result.permissions),
+      rate_limit: Number(result.rate_limit) || CONSTANTS.RATE_LIMIT_MAX_REQUESTS,
+      is_active: Number(result.key_is_active) as 0 | 1
+    };
     if (!['active', 'trialing'].includes(user.subscription_status)) {
+      console.log('User subscription not active');
       return null;
     }
-    env.DB.prepare(`UPDATE api_keys SET last_used_at = datetime('now'), usage_count = usage_count + 1 WHERE key_id = ?`).bind(apiKey).run().catch(err => console.error('Failed to update API key usage:', err));
+    // Update usage stats
+    env.DB.prepare(`UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP, usage_count = usage_count + 1 WHERE key_id = ?`)
+      .bind(apiKey)
+      .run()
+      .catch(err => console.error('Failed to update API key usage:', err));
     return { user, client, apiKey: apiKeyData };
   } catch (error) {
     console.error('Authentication error:', error);
@@ -717,56 +852,199 @@ async function handleHealthCheck(env: Env): Promise<Response> {
 }
 
 // ================= AUTH HANDLERS =================
+// PASTE THIS CLEAN VERSION
+// FIXED VERSION OF handleSignup
+// Replace the existing handleSignup function in your src/index.ts with this version
 async function handleSignup(request: Request, env: Env): Promise<Response> {
   try {
-    const validation = await validateRequest(request, { companyName: 'string', email: 'string', password: 'string', plan: 'string', name: 'string' });
+    const validation = await validateRequest(request, {
+      companyName: 'string',
+      email: 'string',
+      password: 'string',
+      plan: 'string',
+      name: 'string'
+    });
     if (!validation.valid) {
-      return ResponseHelper.errorResponse('Invalid request data', 'VALIDATION_ERROR', validation.errors, 400, env);
+      return ResponseHelper.errorResponse(
+        'Invalid request data', 
+        'VALIDATION_ERROR', 
+        validation.errors, 
+        400, 
+        env
+      );
     }
     const body: SignupRequest = validation.data!;
     const { companyName, email, password, plan, name } = body;
+    // Validate email
     if (!Security.isValidEmail(email)) {
-      return ResponseHelper.errorResponse('Invalid email format', 'INVALID_EMAIL', null, 400, env);
+      return ResponseHelper.errorResponse(
+        'Invalid email format', 
+        'INVALID_EMAIL', 
+        null, 
+        400, 
+        env
+      );
     }
+    // Validate password strength
     const passwordCheck = Security.isStrongPassword(password);
     if (!passwordCheck.valid) {
-      return ResponseHelper.errorResponse(passwordCheck.message!, 'WEAK_PASSWORD', null, 400, env);
+      return ResponseHelper.errorResponse(
+        passwordCheck.message!, 
+        'WEAK_PASSWORD', 
+        null, 
+        400, 
+        env
+      );
     }
+    // Validate plan
     if (plan && !CONSTANTS.VALID_PLANS.includes(plan as any)) {
-      return ResponseHelper.errorResponse('Invalid plan selected', 'INVALID_PLAN', null, 400, env);
+      return ResponseHelper.errorResponse(
+        'Invalid plan selected', 
+        'INVALID_PLAN', 
+        null, 
+        400, 
+        env
+      );
     }
-    const existingUser = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    // Check for existing user
+    const existingUser = await env.DB.prepare(
+      'SELECT id FROM users WHERE email = ?'
+    ).bind(email).first();
     if (existingUser) {
-      return ResponseHelper.errorResponse('User already exists with this email', 'USER_EXISTS', null, 409, env);
+      return ResponseHelper.errorResponse(
+        'User already exists with this email', 
+        'USER_EXISTS', 
+        null, 
+        409, 
+        env
+      );
     }
+    // Generate API key and hash it
     const apiKey = Security.generateSecureApiKey();
-    const salt = PasswordHasher.getRandomSalt();
-    const hashedPassword = await PasswordHasher.hashPassword(password, salt);
+    const apiKeySalt = PasswordHasher.getRandomSalt();
+    const apiKeyHash = await PasswordHasher.hashPassword(apiKey, apiKeySalt);
+    // Hash user password
+    const userSalt = PasswordHasher.getRandomSalt();
+    const hashedPassword = await PasswordHasher.hashPassword(password, userSalt);
     try {
-      const clientResult = await env.DB.prepare(`INSERT INTO clients (name, api_key, plan, created_at) VALUES (?, ?, ?, datetime('now'))`).bind(companyName, apiKey, plan || 'free').run();
+      console.log('Creating client with data:', {
+        companyName,
+        plan: plan || 'free',
+        apiKeyLength: apiKey.length
+      });
+      let maxDailyRequests = 100; // Default for free plan
+if (plan === 'basic') {
+  maxDailyRequests = 2500;
+} else if (plan === 'pro') {
+  maxDailyRequests = 10000;
+} else if (plan === 'premium') {
+  maxDailyRequests = 50000;
+} else if (plan === 'enterprise') {
+  maxDailyRequests = 100000; // Or a very high number for enterprise
+}
+
+const clientResult = await env.DB.prepare(
+  `INSERT INTO clients (name, plan, api_key, max_daily_requests, created_at) 
+   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
+).bind(companyName, plan || 'free', apiKey, maxDailyRequests).run();
+      console.log('Client insert result:', clientResult.meta);
       if (!clientResult.meta.last_row_id) {
-        throw new Error('Failed to create client');
+        throw new Error('Failed to create client - no row ID returned');
       }
       const clientId = clientResult.meta.last_row_id;
       const subscriptionStatus = plan === 'free' ? 'active' : 'pending';
-      const userResult = await env.DB.prepare(`INSERT INTO users (client_id, email, password_hash, salt_hex, name, subscription_status, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`).bind(clientId, email, hashedPassword.hash, hashedPassword.salt, name || '', subscriptionStatus).run();
+      console.log('Created client with ID:', clientId);
+      // 2. Insert into users
+      const userResult = await env.DB.prepare(
+        `INSERT INTO users (
+          client_id, email, password_hash, salt_hex, name, 
+          subscription_status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+      ).bind(
+        clientId,
+        email,
+        hashedPassword.hash,
+        hashedPassword.salt,
+        name || '',
+        subscriptionStatus
+      ).run();
+      console.log('User insert result:', userResult.meta);
       if (!userResult.meta.last_row_id) {
-        throw new Error('Failed to create user');
+        throw new Error('Failed to create user - no row ID returned');
       }
       const userId = userResult.meta.last_row_id;
-      await env.DB.prepare(`INSERT INTO api_keys (key_id, key_hash, user_id, name, created_at) VALUES (?, ?, ?, ?, datetime('now'))`).bind(apiKey, hashedPassword.hash, userId, 'Default Key').run();
-      const verifyToken = await JWTManager.signJwt({ type: 'verify-email', userId, email }, env.JWT_SECRET);
-      const sessionToken = plan === 'free' ? await JWTManager.signJwt({ userId }, env.JWT_SECRET) : undefined;
-      const verificationLink = `https://localhost:3000/verify-email?token=${encodeURIComponent(verifyToken)}`;
-      const emailSent = await EmailService.sendEmail(env, { to: email, subject: 'Verify Your Email - DSN Analytics', html: EmailService.getVerificationEmailTemplate(verificationLink, name || '') });
-      return ResponseHelper.jsonResponse({ success: true, message: plan === 'free' ? 'Account created successfully! Please check your email to verify your account.' : 'Account created. Please complete payment to activate.', apiKey: plan === 'free' ? apiKey : undefined, token: sessionToken, email_sent: emailSent, clientId: clientId, userId: userId, companyName: companyName, plan: plan || 'free', requiresPayment: plan !== 'free' }, 201, env);
+      console.log('Created user with ID:', userId);
+      // 3. Store the API key with its hash and salt
+      await env.DB.prepare(
+        `INSERT INTO api_keys (
+          key_id, key_hash, key_salt_hex, user_id, name, created_at
+        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+      ).bind(
+        apiKey,
+        apiKeyHash.hash,
+        PasswordHasher.bufferToHex(apiKeySalt),
+        userId,
+        'Default Key'
+      ).run();
+      console.log('API key created successfully');
+      // Generate verification token
+      const verifyToken = await JWTManager.signJwt(
+        { type: 'verify-email', userId, email }, 
+        env.JWT_SECRET
+      );
+      
+      // ✅ MODIFIED: Generate sessionToken for ALL users, regardless of plan.
+      // For paid users, this token is temporary and used only for payment authorization.
+      const sessionToken = await JWTManager.signJwt({ userId }, env.JWT_SECRET);
+
+      // Send verification email
+      const verificationLink = `${env.FRONTEND_URL}/verify-email?token=${encodeURIComponent(verifyToken)}`;
+      const emailSent = await EmailService.sendEmail(env, {
+        to: email,
+        subject: 'Verify Your Email - DSN Analytics',
+        html: EmailService.getVerificationEmailTemplate(verificationLink, name || '')
+      });
+      console.log('Verification email sent:', emailSent);
+      return ResponseHelper.jsonResponse({
+        success: true,
+        message: plan === 'free'
+          ? 'Account created successfully! Please check your email to verify your account.'
+          : 'Account created. Please complete payment to activate.',
+        apiKey: plan === 'free' ? apiKey : undefined,
+        token: sessionToken, // ✅ Always return the token
+        email_sent: emailSent,
+        clientId,
+        userId,
+        companyName,
+        plan: plan || 'free',
+        requiresPayment: plan !== 'free'
+      }, 201, env);
     } catch (dbError) {
       console.error('Database error during signup:', dbError);
-      return ResponseHelper.errorResponse('Failed to create account', 'SIGNUP_ERROR', null, 500, env);
+      console.error('Error details:', {
+        message: (dbError as Error).message,
+        stack: (dbError as Error).stack
+      });
+      return ResponseHelper.errorResponse(
+        'Failed to create account', 
+        'SIGNUP_ERROR', 
+        { 
+          error: (dbError as Error).message,
+          hint: 'Check database schema and permissions'
+        }, 
+        500, 
+        env
+      );
     }
   } catch (error) {
     console.error('Signup error:', error);
-    return ResponseHelper.errorResponse('Failed to create account', 'SIGNUP_ERROR', null, 500, env);
+    return ResponseHelper.errorResponse(
+      'Failed to create account', 
+      'SIGNUP_ERROR', 
+      { error: (error as Error).message }, 
+      500, 
+      env
+    );
   }
 }
 
@@ -795,7 +1073,26 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
     if (!client) {
       return ResponseHelper.errorResponse('Client not found', 'CLIENT_NOT_FOUND', null, 404, env);
     }
-    await env.DB.prepare(`UPDATE users SET last_login_at = datetime('now') WHERE id = ?`).bind(user.id).run();
+
+    // After successful login, ensure the client's max_daily_requests is set correctly
+    let maxDailyRequests = 100; // Default for free plan
+    if (client.plan === 'basic') {
+      maxDailyRequests = 2500;
+    } else if (client.plan === 'pro') {
+      maxDailyRequests = 10000;
+    } else if (client.plan === 'premium') {
+      maxDailyRequests = 50000;
+    } else if (client.plan === 'enterprise') {
+      maxDailyRequests = 100000;
+    }
+
+    // Only update if the current value is null or 0, or if the plan has changed.
+    const currentClient = await env.DB.prepare(`SELECT max_daily_requests FROM clients WHERE id = ?`).bind(client.id).first<{ max_daily_requests: number }>();
+    if (!currentClient || currentClient.max_daily_requests !== maxDailyRequests) {
+      await env.DB.prepare(`UPDATE clients SET max_daily_requests = ? WHERE id = ?`).bind(maxDailyRequests, client.id).run();
+    }
+
+    await env.DB.prepare(`UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(user.id).run();
     const token = await JWTManager.signJwt({ userId: user.id }, env.JWT_SECRET);
     return ResponseHelper.jsonResponse({ success: true, token, user: { id: user.id, name: user.name, email: email }, client: { id: client.id, name: client.name, plan: client.plan }, api_key: client.api_key }, 200, env);
   } catch (error) {
@@ -855,7 +1152,7 @@ async function handleResetPassword(request: Request, env: Env): Promise<Response
     }
     const body = validation.data as { token: string; newPassword: string };
     const { token, newPassword } = body;
-    const user = await env.DB.prepare(`SELECT id, email, name FROM users WHERE password_reset_token = ? AND password_reset_expires > datetime('now')`).bind(token).first<{ id: number; email: string; name: string; }>();
+    const user = await env.DB.prepare(`SELECT id, email, name FROM users WHERE password_reset_token = ? AND password_reset_expires > CURRENT_TIMESTAMP`).bind(token).first<{ id: number; email: string; name: string; }>();
     if (!user) {
       return ResponseHelper.errorResponse('Invalid or expired reset token', 'INVALID_TOKEN', null, 400, env);
     }
@@ -874,45 +1171,99 @@ async function handleResetPassword(request: Request, env: Env): Promise<Response
 }
 
 // ================= PAYMENT HANDLERS =================
+// FIXED PAYMENT HANDLERS
+// Replace these functions in your src/index.ts
 async function handleCreatePayFastPayment(request: Request, env: Env, user: User): Promise<Response> {
   try {
-    const validation = await validateRequest(request, { plan: 'string', name: 'string', email: 'string', amount: 'number' });
+    // Check if PayFast is configured
+    if (!env.PAYFAST_MERCHANT_ID || !env.PAYFAST_MERCHANT_KEY || !env.PAYFAST_PASSPHRASE) {
+      console.error('PayFast credentials not configured');
+      return ResponseHelper.errorResponse(
+        'PayFast payment method is not available',
+        'PAYMENT_METHOD_UNAVAILABLE',
+        { message: 'PayFast has not been configured for this environment' },
+        503,
+        env
+      );
+    }
+    const validation = await validateRequest(request, { plan: 'string' });
     if (!validation.valid) {
       return ResponseHelper.errorResponse('Invalid request data', 'VALIDATION_ERROR', validation.errors, 400, env);
     }
-    const body = validation.data as { plan: string; name: string; email: string; amount: number; };
-    if (!CONSTANTS.VALID_PLANS.includes(body.plan as any)) {
+    const body = validation.data as { plan: string };
+    // Get server-side price in USD
+    const amountUSD = PLAN_PRICES[body.plan];
+    if (!amountUSD) {
       return ResponseHelper.errorResponse('Invalid plan', 'INVALID_PLAN', null, 400, env);
     }
+    // Convert to ZAR (use real-time API in production)
+    async function getExchangeRate(): Promise<number> {
+      try {
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD  ');
+        const data = await response.json() as { rates: { ZAR: number } };
+        return data.rates.ZAR;
+      } catch (error) {
+        console.error('Failed to fetch exchange rate, using fallback');
+        return 18.5; // Fallback rate
+      }
+    }
+    const USD_TO_ZAR_RATE = await getExchangeRate();
+    const amountZAR = parseFloat(amountUSD) * USD_TO_ZAR_RATE;
+    // Add VAT (15% for South Africa)
+    const totalAmountZAR = (amountZAR * 1.15).toFixed(2);
     const paymentId = `${body.plan}_${user.id}_${Date.now()}`;
     const url = new URL(request.url);
     const baseUrl = `${url.protocol}//${url.host}`;
+    // Get user details from the secure 'user' object
+    const userNameParts = user.name.split(' ');
+    const firstName = userNameParts[0] || user.name;
+    const lastName = userNameParts.slice(1).join(' ') || ' ';
     const payfastData: Record<string, string> = {
       merchant_id: env.PAYFAST_MERCHANT_ID,
       merchant_key: env.PAYFAST_MERCHANT_KEY,
-      amount: body.amount.toFixed(2),
+      amount: totalAmountZAR,
       item_name: `DSN Research - ${body.plan.charAt(0).toUpperCase() + body.plan.slice(1)} Plan`,
-      item_description: `Monthly subscription to ${body.plan} plan`,
-      name_first: body.name.split(' ')[0] || body.name,
-      name_last: body.name.split(' ').slice(1).join(' ') || ' ',
-      email_address: body.email,
+      item_description: `Monthly subscription to ${body.plan} plan (USD $${amountUSD})`,
+      name_first: firstName,
+      name_last: lastName,
+      email_address: user.email,
       m_payment_id: paymentId,
       custom_str1: user.id.toString(),
       custom_str2: body.plan,
       custom_str3: user.email,
-      return_url: `https://dsnresearch.com/payment-success?plan=${body.plan}`,
-      cancel_url: `https://dsnresearch.com/payment-cancel?plan=${body.plan}`,
+      return_url: `${env.FRONTEND_URL}/payment-success?plan=${body.plan}&provider=payfast`,
+      cancel_url: `${env.FRONTEND_URL}/payment-cancel?plan=${body.plan}`,
       notify_url: `${baseUrl}/api/payment/payfast-webhook`,
       subscription_type: '1',
       billing_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      recurring_amount: body.amount.toFixed(2),
+      recurring_amount: totalAmountZAR,
       frequency: '3',
-      cycles: '0',
+      cycles: '0'
     };
     const signature = await PayFastHelper.generateSignature(payfastData, env.PAYFAST_PASSPHRASE);
     payfastData.signature = signature;
-    await env.DB.prepare(`INSERT INTO payments (user_id, client_id, provider, provider_order_id, plan, amount, status, created_at) VALUES (?, ?, 'payfast', ?, ?, ?, 'pending', datetime('now'))`).bind(user.id, user.client_id, paymentId, body.plan, body.amount).run();
-    return ResponseHelper.jsonResponse({ success: true, formData: payfastData, paymentId: paymentId, payfastUrl: PayFastHelper.getPayFastUrl(env.PAYFAST_MODE || 'sandbox') }, 200, env);
+    // ✅ FIXED: Log the USD amount, use correct column name
+    const amountCents = Math.round(parseFloat(amountUSD) * 100);
+    await env.DB.prepare(
+      `INSERT INTO payments (
+        user_id, client_id, provider, provider_order_id, 
+        plan, amount_cents, currency, status, created_at
+      ) VALUES (?, ?, 'payfast', ?, ?, ?, 'usd', 'pending', CURRENT_TIMESTAMP)`
+    ).bind(
+      user.id, 
+      user.client_id, 
+      paymentId, 
+      body.plan, 
+      amountCents  // Store as integer cents
+    ).run();
+    return ResponseHelper.jsonResponse({
+      success: true,
+      formData: payfastData,
+      paymentId: paymentId,
+      payfastUrl: PayFastHelper.getPayFastUrl(env.PAYFAST_MODE || 'sandbox'),
+      amountUSD: amountUSD,
+      amountZAR: totalAmountZAR
+    }, 200, env);
   } catch (error) {
     console.error('PayFast payment creation error:', error);
     return ResponseHelper.errorResponse('Failed to create payment', 'PAYMENT_ERROR', null, 500, env);
@@ -937,54 +1288,101 @@ async function handlePayFastWebhook(request: Request, env: Env): Promise<Respons
     console.log(`Processing PayFast webhook: ${paymentStatus} for user ${userId}, plan ${plan}`);
     switch (paymentStatus) {
       case 'COMPLETE':
-        await env.DB.prepare(`UPDATE payments SET status = 'completed', updated_at = datetime('now') WHERE provider_order_id = ?`).bind(paymentId).run();
-        const user = await env.DB.prepare(`SELECT client_id FROM users WHERE id = ?`).bind(userId).first<{ client_id: number }>();
+        // ✅ FIXED: Use CURRENT_TIMESTAMP
+        await env.DB.prepare(
+          `UPDATE payments 
+           SET status = 'completed', updated_at = CURRENT_TIMESTAMP 
+           WHERE provider_order_id = ?`
+        ).bind(paymentId).run();
+        const user = await env.DB.prepare(
+          `SELECT client_id FROM users WHERE id = ?`
+        ).bind(userId).first<{ client_id: number }>();
         if (user) {
-          await env.DB.prepare(`UPDATE clients SET plan = ? WHERE id = ?`).bind(plan, user.client_id).run();
-          await env.DB.prepare(`UPDATE users SET subscription_status = 'active', updated_at = datetime('now') WHERE id = ?`).bind(userId).run();
+          await env.DB.prepare(
+            `UPDATE clients SET plan = ? WHERE id = ?`
+          ).bind(plan, user.client_id).run();
+          await env.DB.prepare(
+            `UPDATE users 
+             SET subscription_status = 'active', updated_at = CURRENT_TIMESTAMP 
+             WHERE id = ?`
+          ).bind(userId).run();
           console.log(`✅ Subscription activated for user ${userId}, plan ${plan}`);
         }
         break;
       case 'FAILED':
       case 'CANCELLED':
-        await env.DB.prepare(`UPDATE payments SET status = ?, updated_at = datetime('now') WHERE provider_order_id = ?`).bind(paymentStatus.toLowerCase(), paymentId).run();
+        await env.DB.prepare(
+          `UPDATE payments 
+           SET status = ?, updated_at = CURRENT_TIMESTAMP 
+           WHERE provider_order_id = ?`
+        ).bind(paymentStatus.toLowerCase(), paymentId).run();
         console.log(`❌ Payment ${paymentStatus} for user ${userId}`);
         break;
       default:
         console.log(`⚠️ Unhandled PayFast status: ${paymentStatus}`);
     }
-    return ResponseHelper.jsonResponse({ success: true, message: 'Webhook processed' }, 200, env);
+    return ResponseHelper.jsonResponse({ 
+      success: true, 
+      message: 'Webhook processed' 
+    }, 200, env);
   } catch (error) {
     console.error('PayFast webhook processing error:', error);
-    return ResponseHelper.jsonResponse({ success: false, message: 'Webhook processing error' }, 200, env);
+    return ResponseHelper.jsonResponse({ 
+      success: false, 
+      message: 'Webhook processing error' 
+    }, 200, env);
   }
 }
 
 async function handleCreatePayPalPayment(request: Request, env: Env, user: User): Promise<Response> {
   try {
-    const validation = await validateRequest(request, { plan: 'string', amount: 'number' });
+    // Check if PayPal is configured
+    if (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET) {
+      console.error('PayPal credentials not configured');
+      return ResponseHelper.errorResponse(
+        'PayPal payment method is not available',
+        'PAYMENT_METHOD_UNAVAILABLE',
+        { message: 'PayPal has not been configured for this environment' },
+        503,
+        env
+      );
+    }
+    const validation = await validateRequest(request, { plan: 'string' });
     if (!validation.valid) {
       return ResponseHelper.errorResponse('Invalid request data', 'VALIDATION_ERROR', validation.errors, 400, env);
     }
-    const body = validation.data as { plan: string; amount: number };
-    if (!CONSTANTS.VALID_PLANS.includes(body.plan as any)) {
+    const body = validation.data as { plan: string };
+    // Validate plan
+    if (!CONSTANTS.VALID_PLANS.includes(body.plan as any) || body.plan === 'free') {
+      return ResponseHelper.errorResponse('Invalid plan', 'INVALID_PLAN', null, 400, env);
+    }
+    // Get price from SERVER-SIDE definition
+    const amount = PLAN_PRICES[body.plan];
+    if (!amount) {
       return ResponseHelper.errorResponse('Invalid plan', 'INVALID_PLAN', null, 400, env);
     }
     const accessToken = await PayPalHelper.getAccessToken(env);
     if (!accessToken) {
-      return ResponseHelper.errorResponse('Failed to get PayPal access token', 'PAYMENT_ERROR', null, 500, env);
+      console.error('Failed to authenticate with PayPal');
+      return ResponseHelper.errorResponse(
+        'Failed to connect to PayPal', 
+        'PAYMENT_ERROR', 
+        { message: 'Could not authenticate with PayPal. Please check PayPal credentials.' },
+        500, 
+        env
+      );
     }
     const orderData = {
       intent: 'CAPTURE',
       purchase_units: [{
-        reference_id: body.plan, // Use reference_id for the plan
+        reference_id: body.plan,
         amount: {
           currency_code: 'USD',
-          value: body.amount.toFixed(2),
+          value: parseFloat(amount).toFixed(2),
         },
         description: `DSN Research - ${body.plan.charAt(0).toUpperCase() + body.plan.slice(1)} Plan`,
         custom_id: user.id.toString(),
-      }, ],
+      }],
     };
     const response = await fetch(`${PayPalHelper.getApiUrl(env)}/v2/checkout/orders`, {
       method: 'POST',
@@ -997,11 +1395,45 @@ async function handleCreatePayPalPayment(request: Request, env: Env, user: User)
     if (!response.ok) {
       const error = await response.text();
       console.error('PayPal order creation failed:', error);
-      return ResponseHelper.errorResponse('Failed to create PayPal order', 'PAYMENT_ERROR', JSON.parse(error), 500, env);
+      return ResponseHelper.errorResponse(
+        'Failed to create PayPal order', 
+        'PAYMENT_ERROR', 
+        { paypalError: error },
+        500, 
+        env
+      );
     }
     const order: any = await response.json();
-    await env.DB.prepare(`INSERT INTO payments (user_id, client_id, provider, provider_order_id, plan, amount, status, created_at) VALUES (?, ?, 'paypal', ?, ?, ?, 'pending', datetime('now'))`).bind(user.id, user.client_id, order.id, body.plan, body.amount).run();
-    return ResponseHelper.jsonResponse({ success: true, orderId: order.id, approvalUrl: order.links.find((link: any) => link.rel === 'approve')?.href }, 200, env);
+    // ✅ FIXED: Store amount in cents as integer
+    const amountCents = Math.round(parseFloat(amount) * 100);
+    await env.DB.prepare(
+      `INSERT INTO payments (
+        user_id, client_id, provider, provider_order_id, 
+        plan, amount_cents, currency, status, created_at
+      ) VALUES (?, ?, 'paypal', ?, ?, ?, 'usd', 'pending', CURRENT_TIMESTAMP)`
+    ).bind(
+      user.id, 
+      user.client_id, 
+      order.id, 
+      body.plan, 
+      amountCents
+    ).run();
+    const approvalUrl = order.links?.find((link: any) => link.rel === 'approve')?.href;
+    if (!approvalUrl) {
+      console.error('No approval URL in PayPal response:', order);
+      return ResponseHelper.errorResponse(
+        'Invalid PayPal response',
+        'PAYMENT_ERROR',
+        { message: 'PayPal did not return an approval URL' },
+        500,
+        env
+      );
+    }
+    return ResponseHelper.jsonResponse({
+      success: true,
+      orderId: order.id,
+      approvalUrl: approvalUrl
+    }, 200, env);
   } catch (error) {
     console.error('PayPal payment creation error:', error);
     return ResponseHelper.errorResponse('Failed to create payment', 'PAYMENT_ERROR', null, 500, env);
@@ -1047,11 +1479,11 @@ async function handlePayPalOrderCompleted(event: any, env: Env) {
     return;
   }
   console.log(`Activating plan '${plan}' for user ${userId} from PayPal order ${orderId}`);
-  await env.DB.prepare(`UPDATE payments SET status = 'completed', updated_at = datetime('now') WHERE provider_order_id = ? AND provider = 'paypal'`).bind(orderId).run();
+  await env.DB.prepare(`UPDATE payments SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE provider_order_id = ? AND provider = 'paypal'`).bind(orderId).run();
   const user = await env.DB.prepare(`SELECT client_id FROM users WHERE id = ?`).bind(userId).first<{ client_id: number }>();
   if (user) {
     await env.DB.prepare(`UPDATE clients SET plan = ? WHERE id = ?`).bind(plan, user.client_id).run();
-    await env.DB.prepare(`UPDATE users SET subscription_status = 'active', updated_at = datetime('now') WHERE id = ?`).bind(userId).run();
+    await env.DB.prepare(`UPDATE users SET subscription_status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(userId).run();
     console.log(`✅ Subscription activated for user ${userId} via PayPal`);
   }
 }
@@ -1063,7 +1495,7 @@ async function handlePayPalSubscriptionCancelled(event: any, env: Env) {
     console.error(`User for PayPal subscription ${subscriptionId} not found.`);
     return;
   }
-  await env.DB.prepare(`UPDATE users SET subscription_status = 'cancelled', updated_at = datetime('now') WHERE id = ?`).bind(user.id).run();
+  await env.DB.prepare(`UPDATE users SET subscription_status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(user.id).run();
   console.log(`❌ Subscription cancelled for user ${user.id}`);
 }
 
@@ -1080,7 +1512,7 @@ async function handlePayPalSubscriptionActivated(event: any, env: Env) {
     console.error(`Cannot find user for PayPal subscription activation: ${subscriptionId}`);
     return;
   }
-  await env.DB.prepare(`UPDATE users SET subscription_status = 'active', paypal_subscription_id = ?, updated_at = datetime('now') WHERE id = ?`).bind(subscriptionId, user.id).run();
+  await env.DB.prepare(`UPDATE users SET subscription_status = 'active', paypal_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(subscriptionId, user.id).run();
   console.log(`✅ Subscription ${subscriptionId} activated for user ${user.id} via PayPal`);
 }
 
@@ -1102,14 +1534,35 @@ async function handleUpdateUserPlan(request: Request, env: Env, user: User): Pro
       return ResponseHelper.errorResponse('Upgrades must be done through payment flow', 'INVALID_OPERATION', null, 400, env);
     }
     await env.DB.prepare(`UPDATE clients SET plan = ? WHERE id = ?`).bind(body.plan, user.client_id).run();
-    await env.DB.prepare(`UPDATE users SET subscription_status = 'active', updated_at = datetime('now') WHERE id = ?`).bind(user.id).run();
+    await env.DB.prepare(`UPDATE users SET subscription_status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(user.id).run();
     return ResponseHelper.jsonResponse({ success: true, message: `Plan updated to ${body.plan}`, plan: body.plan }, 200, env);
   } catch (error) {
     console.error('Plan update error:', error);
     return ResponseHelper.errorResponse('Failed to update plan', 'UPDATE_ERROR', null, 500, env);
   }
 }
-
+// ================= ENDPOINT TO CHECK PAYMENT METHODS AVAILABILITY =================
+async function handleGetPaymentMethods(env: Env): Promise<Response> {
+  const methods = {
+    payfast: {
+      available: !!(env.PAYFAST_MERCHANT_ID && env.PAYFAST_MERCHANT_KEY && env.PAYFAST_PASSPHRASE),
+      mode: env.PAYFAST_MODE || 'sandbox',
+      name: 'PayFast',
+      region: 'South Africa'
+    },
+    paypal: {
+      available: !!(env.PAYPAL_CLIENT_ID && env.PAYPAL_CLIENT_SECRET),
+      mode: env.PAYPAL_MODE || 'sandbox',
+      name: 'PayPal',
+      region: 'International'
+    }
+  };
+  return ResponseHelper.jsonResponse({
+    success: true,
+    methods: methods,
+    environment: env.ENVIRONMENT
+  }, 200, env);
+}
 // ================= API ENDPOINT HANDLERS =================
 async function handleDataUpload(request: Request, env: Env, user: User, apiKey: ApiKey): Promise<Response> {
   const startTime = Date.now();
@@ -1130,7 +1583,7 @@ async function handleDataUpload(request: Request, env: Env, user: User, apiKey: 
     if (body.data_rows.length > 10000) {
       return ResponseHelper.errorResponse('Maximum 10,000 rows per upload. Please batch your uploads.', 'LIMIT_EXCEEDED', null, 400, env);
     }
-    const sourceResult = await env.DB.prepare(`INSERT INTO data_sources (client_id, source_name, source_type, row_count, created_at) VALUES (?, ?, ?, ?, datetime('now'))`).bind(user.client_id, body.source_name, body.source_type, body.data_rows.length).run();
+    const sourceResult = await env.DB.prepare(`INSERT INTO data_sources (client_id, source_name, source_type, row_count, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`).bind(user.client_id, body.source_name, body.source_type, body.data_rows.length).run();
     const sourceId = sourceResult.meta.last_row_id;
     if (!sourceId) {
       throw new Error('Failed to create data source');
@@ -1199,7 +1652,8 @@ async function handleModelPredict(request: Request, env: Env, user: User, apiKey
     return ResponseHelper.errorResponse('Failed to generate prediction', 'PREDICTION_ERROR', null, 500, env);
   }
 }
-
+// =Function: 
+// 
 async function handleAnalyticsQuery(request: Request, env: Env, user: User, apiKey: ApiKey): Promise<Response> {
   const startTime = Date.now();
   try {
@@ -1207,38 +1661,972 @@ async function handleAnalyticsQuery(request: Request, env: Env, user: User, apiK
     if (!rateLimit.allowed) {
       return ResponseHelper.errorResponse('Rate limit exceeded', 'RATE_LIMIT_EXCEEDED', { remaining: rateLimit.remaining }, 429, env);
     }
-    const validation = await validateRequest(request, { source_id: 'number', analysis_type: 'string' });
+    
+    const validation = await validateRequest(request, { 
+      source_id: 'number', 
+      analysis_type: 'string' 
+    });
+    
     if (!validation.valid) {
-      await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/analytics/query', 'POST', 400, Date.now() - startTime);
-      return ResponseHelper.errorResponse('Missing required fields: source_id, analysis_type', 'VALIDATION_ERROR', validation.errors, 400, env);
+      await RateLimiter.recordUsage(
+        env, apiKey.key_id, user.id, 
+        '/api/analytics/query', 'POST', 400, 
+        Date.now() - startTime
+      );
+      return ResponseHelper.errorResponse(
+        'Missing required fields: source_id, analysis_type', 
+        'VALIDATION_ERROR', 
+        validation.errors, 
+        400, 
+        env
+      );
     }
-    const body = validation.data as { source_id: number; analysis_type: string; parameters?: any };
-    const source = await env.DB.prepare(`SELECT id FROM data_sources WHERE id = ? AND client_id = ?`).bind(body.source_id, user.client_id).first();
+    
+    const body = validation.data as { 
+      source_id: number; 
+      analysis_type: string; 
+      parameters?: any 
+    };
+    
+    // Validate analysis type
+    const validTypes = ['descriptive', 'predictive', 'clustering'];
+    if (!validTypes.includes(body.analysis_type)) {
+      return ResponseHelper.errorResponse(
+        'Invalid analysis_type. Must be: descriptive, predictive, or clustering', 
+        'INVALID_ANALYSIS_TYPE', 
+        null, 
+        400, 
+        env
+      );
+    }
+    
+    // Validate data source exists and belongs to user
+    const source = await env.DB.prepare(
+      `SELECT id, source_name, row_count 
+       FROM data_sources 
+       WHERE id = ? AND client_id = ?`
+    ).bind(body.source_id, user.client_id)
+     .first<{ id: number; source_name: string; row_count: number }>();
+      
     if (!source) {
-      return ResponseHelper.errorResponse('Data source not found', 'NOT_FOUND', null, 404, env);
+      return ResponseHelper.errorResponse(
+        'Data source not found', 
+        'NOT_FOUND', 
+        null, 
+        404, 
+        env
+      );
     }
-    const jobResult = await env.DB.prepare(`INSERT INTO analysis_jobs (client_id, job_type, status, parameters, created_at) VALUES (?, ?, 'pending', ?, datetime('now'))`).bind(user.client_id, body.analysis_type, JSON.stringify(body.parameters || {})).run();
+
+    if (source.row_count === 0) {
+      return ResponseHelper.errorResponse(
+        'Data source is empty', 
+        'NO_DATA', 
+        null, 
+        400, 
+        env
+      );
+    }
+
+    // Validate parameters based on analysis type
+    if (body.analysis_type === 'predictive') {
+      const params = body.parameters || {};
+      if (!params.target || !params.features || !Array.isArray(params.features)) {
+        return ResponseHelper.errorResponse(
+          'Predictive analysis requires parameters: { target: "column_name", features: ["feature1", "feature2", ...] }',
+          'MISSING_PARAMETERS',
+          null,
+          400,
+          env
+        );
+      }
+    }
+    
+    if (body.analysis_type === 'clustering') {
+      const params = body.parameters || {};
+      if (!params.columns || !Array.isArray(params.columns) || !params.k || typeof params.k !== 'number') {
+        return ResponseHelper.errorResponse(
+          'Clustering analysis requires parameters: { columns: ["col1", "col2", ...], k: number }',
+          'MISSING_PARAMETERS',
+          null,
+          400,
+          env
+        );
+      }
+      if (params.k < 2 || params.k > 20) {
+        return ResponseHelper.errorResponse(
+          'k must be between 2 and 20',
+          'INVALID_K',
+          null,
+          400,
+          env
+        );
+      }
+    }
+
+    // ✅ ONLY CREATE THE JOB - DO NOT PERFORM ANALYSIS
+    const jobResult = await env.DB.prepare(
+      `INSERT INTO analysis_jobs (
+        client_id, 
+        source_id,
+        job_type, 
+        status, 
+        parameters, 
+        created_at
+      ) VALUES (?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP)`
+    ).bind(
+      user.client_id, 
+      body.source_id,
+      body.analysis_type, 
+      JSON.stringify(body.parameters || {})
+    ).run();
+    
     const jobId = jobResult.meta.last_row_id;
-    let results: any = {};
-    if (body.analysis_type === 'descriptive') {
-      const dataCount = await env.DB.prepare(`SELECT COUNT(*) as total_rows FROM raw_data WHERE source_id = ?`).bind(body.source_id).first<{ total_rows: number }>();
-      results = { total_rows: dataCount?.total_rows || 0, analysis_type: 'descriptive_statistics', summary: 'Basic statistical analysis completed', metrics: { mean: 42.5, median: 40, std_dev: 12.3, min: 10, max: 95 } };
-    } else if (body.analysis_type === 'predictive') {
-      results = { model_type: 'linear_regression', r_squared: 0.87, predictions: [{ input: 10, predicted: 35, confidence: 0.92 }, { input: 20, predicted: 60, confidence: 0.89 }], feature_importance: { x: 0.95, intercept: 0.05 } };
-    } else if (body.analysis_type === 'clustering') {
-      results = { algorithm: 'k-means', num_clusters: 3, clusters: [{ id: 0, size: 45, centroid: [2.5, 3.1] }, { id: 1, size: 38, centroid: [7.2, 8.9] }, { id: 2, size: 27, centroid: [12.1, 5.4] }], silhouette_score: 0.73 };
-    } else {
-      return ResponseHelper.errorResponse('Invalid analysis_type. Must be: descriptive, predictive, or clustering', 'INVALID_ANALYSIS_TYPE', null, 400, env);
+
+    if (!jobId) {
+      throw new Error('Failed to create analysis job');
     }
-    await env.DB.prepare(`UPDATE analysis_jobs SET status = 'completed', results = ?, completed_at = datetime('now') WHERE id = ?`).bind(JSON.stringify(results), jobId).run();
-    await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/analytics/query', 'POST', 200, Date.now() - startTime);
-    return ResponseHelper.jsonResponse({ success: true, job_id: jobId, status: 'completed', results }, 200, env);
+
+    await RateLimiter.recordUsage(
+      env, apiKey.key_id, user.id, 
+      '/api/analytics/query', 'POST', 202, 
+      Date.now() - startTime
+    );
+
+    // ✅ Return immediately with job_id - user will poll for results
+    return ResponseHelper.jsonResponse({
+      success: true,
+      job_id: jobId,
+      status: 'pending',
+      message: 'Analysis job created successfully. Use GET /api/analytics/results/{job_id} to check status.',
+      source: {
+        id: source.id,
+        name: source.source_name,
+        row_count: source.row_count
+      },
+      analysis_type: body.analysis_type,
+      estimated_time: estimateProcessingTime(body.analysis_type, source.row_count)
+    }, 202, env);
+    
   } catch (error) {
-    console.error('Analytics error:', error);
-    await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/analytics/query', 'POST', 500, Date.now() - startTime);
-    return ResponseHelper.errorResponse('Failed to process analytics query', 'ANALYTICS_ERROR', null, 500, env);
+    console.error('Analytics job creation error:', error);
+    await RateLimiter.recordUsage(
+      env, apiKey.key_id, user.id, 
+      '/api/analytics/query', 'POST', 500, 
+      Date.now() - startTime
+    );
+    return ResponseHelper.errorResponse(
+      'Failed to create analysis job', 
+      'JOB_CREATION_ERROR', 
+      { details: (error as Error).message }, 
+      500, 
+      env
+    );
   }
 }
+
+// Helper function to estimate processing time
+function estimateProcessingTime(analysisType: string, rowCount: number): string {
+  if (analysisType === 'descriptive') {
+    return rowCount < 1000 ? '< 1 minute' : '1-2 minutes';
+  } else if (analysisType === 'predictive') {
+    return rowCount < 1000 ? '1-2 minutes' : '2-5 minutes';
+  } else if (analysisType === 'clustering') {
+    return rowCount < 1000 ? '2-3 minutes' : '5-10 minutes';
+  }
+  return '1-5 minutes';
+}
+
+// =====================================
+// ANALYSIS IMPLEMENTATIONS
+// =====================================
+
+async function runDescriptiveAnalysis(
+  env: Env, 
+  job: AnalysisJobRecord
+): Promise<any> {
+  console.log(`[Descriptive] Starting analysis for job ${job.id}`);
+
+  // Fetch all data rows for this source
+  const dataRows = await env.DB.prepare(
+    `SELECT data_row FROM raw_data WHERE source_id = ?`
+  ).bind(job.source_id).all<{ data_row: string }>();
+
+  const rows = dataRows.results.map(r => JSON.parse(r.data_row));
+
+  // Statistics Helper Functions
+  const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const median = (arr: number[]) => {
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
+  const stdDev = (arr: number[]) => {
+    const avg = mean(arr);
+    const diffs = arr.map(val => (val - avg) ** 2);
+    return Math.sqrt(mean(diffs));
+  };
+
+  // Identify numeric columns and collect their data
+  const numericColumns: Record<string, number[]> = {};
+  const columnTypes: Record<string, string> = {};
+  const totalRows = rows.length;
+
+  for (const row of rows) {
+    for (const key in row) {
+      const value = row[key];
+      if (typeof value === 'number') {
+        if (!numericColumns[key]) {
+          numericColumns[key] = [];
+          columnTypes[key] = 'numeric';
+        }
+        numericColumns[key].push(value);
+      } else if (!columnTypes[key]) {
+        columnTypes[key] = typeof value;
+      }
+    }
+  }
+
+  // Calculate statistics for each numeric column
+  const calculatedMetrics: Record<string, any> = {};
+  for (const key in numericColumns) {
+    const values = numericColumns[key];
+    calculatedMetrics[key] = {
+      count: values.length,
+      mean: Math.round(mean(values) * 100) / 100,
+      median: Math.round(median(values) * 100) / 100,
+      std_dev: Math.round(stdDev(values) * 100) / 100,
+      min: Math.min(...values),
+      max: Math.max(...values),
+    };
+  }
+
+  console.log(`[Descriptive] ✅ Analysis completed for ${totalRows} rows`);
+
+  return {
+    total_rows: totalRows,
+    analysis_type: 'descriptive_statistics',
+    summary: 'Descriptive statistical analysis completed.',
+    metrics: calculatedMetrics,
+    column_types: columnTypes,
+    processed_at: new Date().toISOString()
+  };
+}
+
+// =Function: 
+// 
+async function runPredictiveAnalysis(
+  env: Env, 
+  job: AnalysisJobRecord
+): Promise<any> {
+  console.log(`[Predictive] Starting analysis for job ${job.id}`);
+  const params = JSON.parse(job.parameters);
+
+  // --- Statistics Helper Functions ---
+  const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const stdDev = (arr: number[]) => {
+    const avg = mean(arr);
+    const diffs = arr.map(val => (val - avg) ** 2);
+    // Use n-1 for sample std dev, but n is fine for this purpose
+    const variance = mean(diffs);
+    return Math.sqrt(variance); 
+  };
+  // --- End Helpers ---
+
+  // Fetch all data rows
+  const dataRows = await env.DB.prepare(
+    `SELECT data_row FROM raw_data WHERE source_id = ?`
+  ).bind(job.source_id).all<{ data_row: string }>();
+  
+  const rows = dataRows.results.map(r => JSON.parse(r.data_row));
+
+  // Extract features (X_raw) and target (y)
+  const X_raw: number[][] = [];
+  const y: number[] = [];
+  
+  for (const row of rows) {
+    if (typeof row[params.target] !== 'number') continue;
+    
+    const featureVector: number[] = [];
+    let validRow = true;
+    for (const feature of params.features) {
+      if (typeof row[feature] !== 'number') {
+        validRow = false;
+        break;
+      }
+      featureVector.push(row[feature]);
+    }
+    
+    if (validRow) {
+      X_raw.push(featureVector);
+      y.push(row[params.target]);
+    }
+  }
+
+  if (X_raw.length < 2 || X_raw.length <= X_raw[0].length) {
+    throw new Error('Insufficient numeric data for regression. (Need more rows than features)');
+  }
+
+  const n = X_raw.length;
+  const numFeatures = X_raw[0].length;
+  console.log(`[Predictive] Processing ${n} data points with ${numFeatures} features`);
+
+  // --- 1. Feature Scaling (Standardization) ---
+  const featureMeans: number[] = [];
+  const featureStdDevs: number[] = [];
+  const X_scaled: number[][] = Array(n).fill(0).map(() => []);
+
+  for (let j = 0; j < numFeatures; j++) {
+    const col = X_raw.map(row => row[j]);
+    const m = mean(col);
+    const s = stdDev(col);
+    
+    featureMeans.push(m);
+    // Handle case where std dev is 0 (all values are the same)
+    const std = (s === 0) ? 1 : s;
+    featureStdDevs.push(std);
+    
+    for (let i = 0; i < n; i++) {
+      X_scaled[i][j] = (X_raw[i][j] - m) / std;
+    }
+  }
+  // --- End Scaling ---
+
+  // --- 2. Linear Regression on SCALED data ---
+  const X_with_intercept = X_scaled.map(row => [1, ...row]); // Now [1, scaled_x1, scaled_x2, ...]
+  
+  // Calculate X'X
+  const XtX: number[][] = Array(numFeatures + 1).fill(0).map(() => 
+    Array(numFeatures + 1).fill(0)
+  );
+  for (let i = 0; i < numFeatures + 1; i++) {
+    for (let j = 0; j < numFeatures + 1; j++) {
+      let sum = 0;
+      for (let k = 0; k < n; k++) {
+        sum += X_with_intercept[k][i] * X_with_intercept[k][j];
+      }
+      XtX[i][j] = sum;
+    }
+  }
+  
+  // Calculate X'y
+  const Xty: number[] = Array(numFeatures + 1).fill(0);
+  for (let i = 0; i < numFeatures + 1; i++) {
+    let sum = 0;
+    for (let k = 0; k < n; k++) {
+      sum += X_with_intercept[k][i] * y[k];
+    }
+    Xty[i] = sum;
+  }
+  
+  // Solve using Gaussian elimination
+  const scaled_coefficients = gaussianElimination(XtX, Xty); // These are B_scaled
+  
+  // --- 3. Un-scale Coefficients ---
+  const coefficients: number[] = Array(numFeatures + 1).fill(0);
+  
+  // Un-scale feature coefficients (B1, B2, ...)
+  for (let i = 1; i < scaled_coefficients.length; i++) {
+    coefficients[i] = scaled_coefficients[i] / featureStdDevs[i - 1];
+  }
+  
+  // Un-scale intercept (B0)
+  let interceptAdjustment = 0;
+  for (let i = 1; i < coefficients.length; i++) {
+    interceptAdjustment += coefficients[i] * featureMeans[i - 1];
+  }
+  coefficients[0] = scaled_coefficients[0] - interceptAdjustment;
+  // --- End Un-scaling ---
+
+  // --- 4. Calculate Metrics using ORIGINAL X_raw and UN-SCALED coefficients ---
+  const X_raw_with_intercept = X_raw.map(row => [1, ...row]);
+  const predictions = X_raw_with_intercept.map(row => {
+    let pred = 0;
+    for (let i = 0; i < coefficients.length; i++) {
+      pred += coefficients[i] * row[i];
+    }
+    return pred;
+  });
+  
+  // Calculate R² (using un-scaled predictions)
+  const yMean = y.reduce((a, b) => a + b, 0) / n;
+  const ssTot = y.reduce((sum, val) => sum + Math.pow(val - yMean, 2), 0);
+  const ssRes = y.reduce((sum, val, i) => sum + Math.pow(val - predictions[i], 2), 0);
+  
+  let rSquared = 1.0;
+  if (ssTot > 1e-10) { // Avoid division by zero if all y are the same
+    const r2 = 1 - (ssRes / ssTot);
+    // Clamp rSquared to 1.0 (it can be > 1 slightly due to precision)
+    // and handle tiny negative numbers (which should be 0)
+    rSquared = Math.max(0, Math.min(1, r2));
+  }
+  
+  // Calculate feature importance (using the comparable SCALED coefficients)
+  const absScaledCoeffs = scaled_coefficients.slice(1).map(Math.abs);
+  const totalAbs = absScaledCoeffs.reduce((a, b) => a + b, 0);
+  const featureImportance: Record<string, number> = {};
+
+  if (totalAbs === 0) {
+      params.features.forEach((feature: string, i: number) => {
+          featureImportance[feature] = 1 / numFeatures; // Equal importance
+      });
+  } else {
+      params.features.forEach((feature: string, i: number) => {
+          featureImportance[feature] = absScaledCoeffs[i] / totalAbs;
+      });
+  }
+
+  // Sample predictions
+  const predictionSamples = predictions.slice(0, Math.min(10, predictions.length)).map((pred, i) => {
+    const residual = Math.abs(y[i] - pred);
+    const allResiduals = y.map((val, j) => Math.abs(val - predictions[j]));
+    const maxResidual = Math.max(...allResiduals);
+    const confidence = (maxResidual === 0 || Math.abs(maxResidual) < 1e-10) ? 1 : Math.max(0, 1 - (residual / maxResidual));
+    return {
+      actual: y[i],
+      predicted: Math.round(pred * 100) / 100,
+      confidence: Math.round(confidence * 100) / 100,
+      features: params.features.reduce((obj: any, feat: string, idx: number) => {
+        obj[feat] = X_raw[i][idx]; // Show original features
+        return obj;
+      }, {})
+    };
+  });
+
+  const mae = y.reduce((sum, val, i) => sum + Math.abs(val - predictions[i]), 0) / n;
+
+  console.log(`[Predictive] ✅ Model trained with R² = ${rSquared.toFixed(3)}`);
+  
+  return {
+    model_type: 'linear_regression (standardized)',
+    r_squared: Math.round(rSquared * 1000) / 1000,
+    coefficients: coefficients.map((c, i) => ({
+      name: i === 0 ? 'intercept' : params.features[i - 1],
+      value: Math.round(c * 1000) / 1000
+    })),
+    predictions: predictionSamples,
+    feature_importance: featureImportance,
+    training_samples: n,
+    mean_absolute_error: Math.round(mae * 100) / 100,
+    processed_at: new Date().toISOString()
+  };
+}
+
+// IMPORTANT: This fix assumes the `gaussianElimination` function
+// exists in the global scope of your worker file, which it does
+// according to the full code you sent earlier.
+
+
+async function runClusteringAnalysis(
+  env: Env, 
+  job: AnalysisJobRecord
+): Promise<any> {
+  console.log(`[Clustering] Starting analysis for job ${job.id}`);
+
+  const params = JSON.parse(job.parameters);
+  const k = params.k;
+
+  // Fetch all data rows
+  const dataRows = await env.DB.prepare(
+    `SELECT data_row FROM raw_data WHERE source_id = ?`
+  ).bind(job.source_id).all<{ data_row: string }>();
+  
+  const rows = dataRows.results.map(r => JSON.parse(r.data_row));
+
+  // Extract feature vectors
+  const dataPoints: number[][] = [];
+  
+  for (const row of rows) {
+    const point: number[] = [];
+    let validPoint = true;
+    for (const col of params.columns) {
+      if (typeof row[col] !== 'number') {
+        validPoint = false;
+        break;
+      }
+      point.push(row[col]);
+    }
+    if (validPoint) {
+      dataPoints.push(point);
+    }
+  }
+
+  if (dataPoints.length < k) {
+    throw new Error(`Insufficient data points (${dataPoints.length}) for ${k} clusters`);
+  }
+
+  console.log(`[Clustering] Processing ${dataPoints.length} points in ${dataPoints[0].length}D space`);
+
+  const numDimensions = dataPoints[0].length;
+  
+  // Euclidean distance
+  function euclideanDistance(a: number[], b: number[]): number {
+    let sum = 0;
+    for (let i = 0; i < a.length; i++) {
+      sum += Math.pow(a[i] - b[i], 2);
+    }
+    return Math.sqrt(sum);
+  }
+
+  // K-means++ initialization
+  const centroids: number[][] = [];
+  centroids.push([...dataPoints[Math.floor(Math.random() * dataPoints.length)]]);
+  
+  for (let c = 1; c < k; c++) {
+    const distances = dataPoints.map(point => {
+      const minDist = Math.min(...centroids.map(centroid => 
+        euclideanDistance(point, centroid)
+      ));
+      return minDist * minDist;
+    });
+    
+    const totalDist = distances.reduce((a, b) => a + b, 0);
+    let randomValue = Math.random() * totalDist;
+    
+    for (let i = 0; i < dataPoints.length; i++) {
+      randomValue -= distances[i];
+      if (randomValue <= 0) {
+        centroids.push([...dataPoints[i]]);
+        break;
+      }
+    }
+  }
+
+  // Lloyd's algorithm
+  let assignments: number[] = Array(dataPoints.length).fill(-1);
+  const maxIterations = 100;
+  let converged = false;
+  let iterations = 0;
+
+  for (let iteration = 0; iteration < maxIterations && !converged; iteration++) {
+    iterations++;
+    
+    // Assignment step
+    const newAssignments: number[] = [];
+    for (const point of dataPoints) {
+      let minDist = Infinity;
+      let closestCluster = 0;
+      
+      for (let c = 0; c < k; c++) {
+        const dist = euclideanDistance(point, centroids[c]);
+        if (dist < minDist) {
+          minDist = dist;
+          closestCluster = c;
+        }
+      }
+      newAssignments.push(closestCluster);
+    }
+
+    // Check convergence
+    converged = JSON.stringify(newAssignments) === JSON.stringify(assignments);
+    assignments = newAssignments;
+
+    if (!converged) {
+      // Update centroids
+      for (let c = 0; c < k; c++) {
+        const clusterPoints = dataPoints.filter((_, i) => assignments[i] === c);
+        
+        if (clusterPoints.length > 0) {
+          for (let d = 0; d < numDimensions; d++) {
+            centroids[c][d] = clusterPoints.reduce((sum, point) => 
+              sum + point[d], 0
+            ) / clusterPoints.length;
+          }
+        }
+      }
+    }
+  }
+
+  // Calculate cluster statistics
+  const clusterInfo = Array(k).fill(0).map((_, c) => {
+    const clusterPoints = dataPoints.filter((_, i) => assignments[i] === c);
+    return {
+      id: c,
+      size: clusterPoints.length,
+      centroid: centroids[c].map(val => Math.round(val * 100) / 100)
+    };
+  });
+
+  // Calculate silhouette score
+  function calculateSilhouette(): number {
+    const silhouettes: number[] = [];
+    
+    for (let i = 0; i < dataPoints.length; i++) {
+      const point = dataPoints[i];
+      const cluster = assignments[i];
+      
+      const sameClusterPoints = dataPoints.filter((_, j) => 
+        assignments[j] === cluster && i !== j
+      );
+      const a = sameClusterPoints.length > 0
+        ? sameClusterPoints.reduce((sum, p) => 
+            sum + euclideanDistance(point, p), 0
+          ) / sameClusterPoints.length
+        : 0;
+      
+      const otherClusters = Array.from({ length: k }, (_, c) => c).filter(c => c !== cluster);
+      const b = Math.min(...otherClusters.map(c => {
+        const otherClusterPoints = dataPoints.filter((_, j) => assignments[j] === c);
+        return otherClusterPoints.length > 0
+          ? otherClusterPoints.reduce((sum, p) => 
+              sum + euclideanDistance(point, p), 0
+            ) / otherClusterPoints.length
+          : Infinity;
+      }));
+      
+      silhouettes.push((b - a) / Math.max(a, b));
+    }
+    
+    return silhouettes.reduce((a, b) => a + b, 0) / silhouettes.length;
+  }
+
+  const silhouetteScore = calculateSilhouette();
+
+  // Calculate inertia
+  const inertia = dataPoints.reduce((sum, point, i) => {
+    return sum + Math.pow(euclideanDistance(point, centroids[assignments[i]]), 2);
+  }, 0);
+
+  console.log(`[Clustering] ✅ Converged after ${iterations} iterations, silhouette = ${silhouetteScore.toFixed(3)}`);
+
+  return {
+    algorithm: 'k-means',
+    num_clusters: k,
+    clusters: clusterInfo,
+    silhouette_score: Math.round(silhouetteScore * 1000) / 1000,
+    inertia: Math.round(inertia * 100) / 100,
+    total_points: dataPoints.length,
+    dimensions: numDimensions,
+    feature_names: params.columns,
+    converged: converged,
+    iterations: iterations,
+    processed_at: new Date().toISOString()
+  };
+}
+
+// Gaussian elimination helper (same as before)
+function gaussianElimination(A: number[][], b: number[]): number[] {
+  const n = b.length;
+  const augmented = A.map((row, i) => [...row, b[i]]);
+  
+  for (let i = 0; i < n; i++) {
+    let maxRow = i;
+    for (let k = i + 1; k < n; k++) {
+      if (Math.abs(augmented[k][i]) > Math.abs(augmented[maxRow][i])) {
+        maxRow = k;
+      }
+    }
+    [augmented[i], augmented[maxRow]] = [augmented[maxRow], augmented[i]];
+    
+    for (let k = i + 1; k < n; k++) {
+      const factor = augmented[k][i] / augmented[i][i];
+      for (let j = i; j < n + 1; j++) {
+        augmented[k][j] -= factor * augmented[i][j];
+      }
+    }
+  }
+  
+  const x = Array(n).fill(0);
+  for (let i = n - 1; i >= 0; i--) {
+    x[i] = augmented[i][n];
+    for (let j = i + 1; j < n; j++) {
+      x[i] -= augmented[i][j] * x[j];
+    }
+    x[i] /= augmented[i][i];
+  }
+  
+  return x;
+}
+
+// =================================
+// RESULTS POLLING ENDPOINT
+// GET /api/analytics/results/:job_id
+// =================================
+
+async function handleAnalyticsResults(
+  request: Request, 
+  env: Env, 
+  user: User, 
+  apiKey: ApiKey,
+  jobId: string
+): Promise<Response> {
+  const startTime = Date.now();
+  
+  try {
+    const rateLimit = await RateLimiter.checkRateLimit(
+      env, 
+      apiKey.key_id, 
+      apiKey.rate_limit
+    );
+    
+    if (!rateLimit.allowed) {
+      return ResponseHelper.errorResponse(
+        'Rate limit exceeded', 
+        'RATE_LIMIT_EXCEEDED', 
+        { remaining: rateLimit.remaining }, 
+        429, 
+        env
+      );
+    }
+
+    // Parse job ID
+    const jobIdNum = parseInt(jobId);
+    if (isNaN(jobIdNum)) {
+      return ResponseHelper.errorResponse(
+        'Invalid job_id', 
+        'INVALID_JOB_ID', 
+        null, 
+        400, 
+        env
+      );
+    }
+
+    // Fetch job record
+    const job = await env.DB.prepare(
+      `SELECT 
+        id, 
+        client_id, 
+        source_id,
+        job_type, 
+        status, 
+        results, 
+        error,
+        created_at, 
+        started_at,
+        completed_at
+       FROM analysis_jobs 
+       WHERE id = ?`
+    ).bind(jobIdNum).first<{
+      id: number;
+      client_id: number;
+      source_id: number;
+      job_type: string;
+      status: string;
+      results: string | null;
+      error: string | null;
+      created_at: string;
+      started_at: string | null;
+      completed_at: string | null;
+    }>();
+
+    if (!job) {
+      await RateLimiter.recordUsage(
+        env, apiKey.key_id, user.id, 
+        `/api/analytics/results/${jobId}`, 'GET', 404, 
+        Date.now() - startTime
+      );
+      return ResponseHelper.errorResponse(
+        'Job not found', 
+        'JOB_NOT_FOUND', 
+        null, 
+        404, 
+        env
+      );
+    }
+
+    // Verify job belongs to user's client
+    if (job.client_id !== user.client_id) {
+      await RateLimiter.recordUsage(
+        env, apiKey.key_id, user.id, 
+        `/api/analytics/results/${jobId}`, 'GET', 403, 
+        Date.now() - startTime
+      );
+      return ResponseHelper.errorResponse(
+        'Access denied', 
+        'FORBIDDEN', 
+        null, 
+        403, 
+        env
+      );
+    }
+
+    // Get source info
+    const source = await env.DB.prepare(
+      `SELECT source_name FROM data_sources WHERE id = ?`
+    ).bind(job.source_id).first<{ source_name: string }>();
+
+    await RateLimiter.recordUsage(
+      env, apiKey.key_id, user.id, 
+      `/api/analytics/results/${jobId}`, 'GET', 200, 
+      Date.now() - startTime
+    );
+
+    // Build response based on status
+    const baseResponse = {
+      success: true,
+      job_id: job.id,
+      job_type: job.job_type,
+      status: job.status,
+      source: {
+        id: job.source_id,
+        name: source?.source_name || 'Unknown'
+      },
+      created_at: job.created_at,
+      started_at: job.started_at,
+      completed_at: job.completed_at
+    };
+
+    if (job.status === 'completed' && job.results) {
+      return ResponseHelper.jsonResponse({
+        ...baseResponse,
+        results: JSON.parse(job.results)
+      }, 200, env);
+    }
+
+    if (job.status === 'failed') {
+      return ResponseHelper.jsonResponse({
+        ...baseResponse,
+        error: job.error || 'Unknown error occurred'
+      }, 200, env);
+    }
+
+    if (job.status === 'processing') {
+      return ResponseHelper.jsonResponse({
+        ...baseResponse,
+        message: 'Analysis is currently being processed. Please check back in a moment.'
+      }, 200, env);
+    }
+
+    // status === 'pending'
+    return ResponseHelper.jsonResponse({
+      ...baseResponse,
+      message: 'Job is queued for processing. Please check back in a moment.',
+      estimated_wait: estimateQueueWaitTime(env, job.id)
+    }, 200, env);
+
+  } catch (error) {
+    console.error('Results retrieval error:', error);
+    await RateLimiter.recordUsage(
+      env, apiKey.key_id, user.id, 
+      `/api/analytics/results/${jobId}`, 'GET', 500, 
+      Date.now() - startTime
+    );
+    return ResponseHelper.errorResponse(
+      'Failed to retrieve job results', 
+      'RESULTS_ERROR', 
+      { details: (error as Error).message }, 
+      500, 
+      env
+    );
+  }
+}
+
+// Helper to estimate wait time based on queue position
+async function estimateQueueWaitTime(env: Env, jobId: number): Promise<string> {
+  try {
+    const queuePosition = await env.DB.prepare(
+      `SELECT COUNT(*) as position 
+       FROM analysis_jobs 
+       WHERE status = 'pending' AND id < ?`
+    ).bind(jobId).first<{ position: number }>();
+
+    const position = queuePosition?.position || 0;
+    
+    if (position === 0) return '< 1 minute';
+    if (position <= 2) return '1-2 minutes';
+    if (position <= 5) return '2-5 minutes';
+    return '5-10 minutes';
+  } catch {
+    return '1-5 minutes';
+  }
+}
+
+// =================================
+// BACKGROUND JOB PROCESSOR
+// This runs separately from HTTP requests via Cron Trigger
+// Processes pending jobs from the analysis_jobs table
+// =================================
+
+interface AnalysisJobRecord {
+  id: number;
+  client_id: number;
+  source_id: number;
+  job_type: string;
+  parameters: string;
+  created_at: string;
+}
+
+/**
+ * Main processor function - called by cron trigger
+ * Processes ONE pending job per invocation
+ */
+export async function processAnalyticsJobs(env: Env): Promise<void> {
+  console.log('[Job Processor] Starting job processing cycle...');
+  
+  try {
+    // Fetch ONE pending job (FIFO - oldest first)
+    const job = await env.DB.prepare(
+      `SELECT id, client_id, source_id, job_type, parameters, created_at
+       FROM analysis_jobs
+       WHERE status = 'pending'
+       ORDER BY created_at ASC
+       LIMIT 1`
+    ).first<AnalysisJobRecord>();
+
+    if (!job) {
+      console.log('[Job Processor] No pending jobs found.');
+      return;
+    }
+
+    console.log(`[Job Processor] Processing job ${job.id}, type: ${job.job_type}`);
+
+    // Mark job as 'processing'
+    await env.DB.prepare(
+      `UPDATE analysis_jobs 
+       SET status = 'processing', started_at = CURRENT_TIMESTAMP 
+       WHERE id = ?`
+    ).bind(job.id).run();
+
+    try {
+      let results: any;
+
+      // Route to appropriate analysis function
+      switch (job.job_type) {
+        case 'descriptive':
+          results = await runDescriptiveAnalysis(env, job);
+          break;
+        case 'predictive':
+          results = await runPredictiveAnalysis(env, job);
+          break;
+        case 'clustering':
+          results = await runClusteringAnalysis(env, job);
+          break;
+        default:
+          throw new Error(`Unknown job type: ${job.job_type}`);
+      }
+
+      // Mark job as completed with results
+      await env.DB.prepare(
+        `UPDATE analysis_jobs 
+         SET status = 'completed', 
+             results = ?, 
+             completed_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).bind(JSON.stringify(results), job.id).run();
+
+      console.log(`[Job Processor] ✅ Job ${job.id} completed successfully`);
+
+    } catch (error) {
+      console.error(`[Job Processor] ❌ Job ${job.id} failed:`, error);
+
+      // Mark job as failed with error details
+      await env.DB.prepare(
+        `UPDATE analysis_jobs 
+         SET status = 'failed', 
+             error = ?, 
+             completed_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).bind((error as Error).message, job.id).run();
+    }
+
+  } catch (error) {
+    console.error('[Job Processor] Fatal error:', error);
+  }
+}
+
+// =================================
+// AI HANDLERS ========================
+// =================================
 
 async function handleAIQuery(request: Request, env: Env, user: User, apiKey: ApiKey): Promise<Response> {
   const startTime = Date.now();
@@ -1259,7 +2647,8 @@ async function handleAIQuery(request: Request, env: Env, user: User, apiKey: Api
     if (!source) {
       return ResponseHelper.errorResponse('Data source not found', 'NOT_FOUND', null, 404, env);
     }
-    const aiResponse = await env.AI.run('@cf/meta/llama-3-8b-instruct', { messages: [{ role: 'system', content: 'You are a data analyst. Answer questions about datasets concisely and accurately. Provide actionable insights.' }, { role: 'user', content: `Dataset: ${source.source_name} (${source.source_type}, ${source.row_count} rows)\n\nQuestion: ${body.query}` }] });
+    const aiResponse = await env.AI.run('@cf/meta/llama-3-8b-instruct', { messages: [{ role: 'system', content: 'You are a data analyst. Answer questions about datasets concisely and accurately. Provide actionable insights.' }, { role: 'user', content: `Dataset: ${source.source_name} (${source.source_type}, ${source.row_count} rows)
+Question: ${body.query}` }] });
     await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/ai/query', 'POST', 200, Date.now() - startTime);
     return ResponseHelper.jsonResponse({ success: true, query: body.query, answer: aiResponse.response, source_context: { name: source.source_name, rows: source.row_count } }, 200, env);
   } catch (error) {
@@ -1269,27 +2658,91 @@ async function handleAIQuery(request: Request, env: Env, user: User, apiKey: Api
   }
 }
 
+// =Function: 
+// 
 async function handleSentimentAnalysis(request: Request, env: Env, user: User, apiKey: ApiKey): Promise<Response> {
+  const startTime = Date.now();
   try {
-    if (!env.AI) {
-      return ResponseHelper.errorResponse('AI service not available', 'AI_NOT_CONFIGURED', null, 503, env);
+    const rateLimit = await RateLimiter.checkRateLimit(env, apiKey.key_id, apiKey.rate_limit);
+    if (!rateLimit.allowed) {
+      return ResponseHelper.errorResponse('Rate limit exceeded', 'RATE_LIMIT_EXCEEDED', { remaining: rateLimit.remaining }, 429, env);
     }
-    const validation = await validateRequest(request, { text: 'string' });
+    
+    // 1. Validate for the correct schema we discovered
+    const validation = await validateRequest(request, { 
+      source_id: 'number', 
+      text_column: 'string',
+      analysis_type: 'string'
+    });
+    
     if (!validation.valid) {
-      return ResponseHelper.errorResponse('Missing text field', 'VALIDATION_ERROR', validation.errors, 400, env);
+      await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/ai/sentiment', 'POST', 400, Date.now() - startTime);
+      return ResponseHelper.errorResponse(
+        'Missing required fields: source_id, text_column, analysis_type', 
+        'VALIDATION_ERROR', 
+        validation.errors, 
+        400, 
+        env
+      );
     }
-    const body = validation.data as { text: string };
-    if (body.text.length > 5000) {
-      return ResponseHelper.errorResponse('Text must be less than 5000 characters', 'TEXT_TOO_LONG', null, 400, env);
+    
+    const body = validation.data as { 
+      source_id: number; 
+      text_column: string;
+      analysis_type: string;
+    };
+
+    if (body.analysis_type !== 'sentiment') {
+      return ResponseHelper.errorResponse('Invalid analysis_type. Must be: sentiment', 'INVALID_ANALYSIS_TYPE', null, 400, env);
     }
-    const result = await env.AI.run('@cf/huggingface/distilbert-sst-2-int8', { text: body.text });
-    return ResponseHelper.jsonResponse({ success: true, text: body.text, sentiment: result[0].label, confidence: result[0].score }, 200, env);
+
+    // 2. Validate data source
+    const source = await env.DB.prepare(
+      `SELECT id, source_name, row_count FROM data_sources WHERE id = ? AND client_id = ?`
+    ).bind(body.source_id, user.client_id)
+     .first<{ id: number; source_name: string; row_count: number }>();
+      
+    if (!source) {
+      return ResponseHelper.errorResponse('Data source not found', 'NOT_FOUND', null, 404, env);
+    }
+
+    // 3. Create the job
+    const jobResult = await env.DB.prepare(
+      `INSERT INTO analysis_jobs (
+        client_id, source_id, job_type, status, parameters, created_at
+      ) VALUES (?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP)`
+    ).bind(
+      user.client_id, 
+      body.source_id,
+      'sentiment', // Use the analysis_type as the job_type
+      JSON.stringify({ text_column: body.text_column }) // Store the text_column in parameters
+    ).run();
+    
+    const jobId = jobResult.meta.last_row_id;
+    if (!jobId) {
+      throw new Error('Failed to create sentiment analysis job');
+    }
+
+    await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/ai/sentiment', 'POST', 202, Date.now() - startTime);
+
+    // 4. Return immediately
+    return ResponseHelper.jsonResponse({
+      success: true,
+      job_id: jobId,
+      status: 'pending',
+      message: 'Sentiment analysis job created. Use GET /api/analytics/results/{job_id} to check status.',
+      estimated_time: estimateProcessingTime('descriptive', source.row_count) // Sentiment is fast, like descriptive
+    }, 202, env);
+    
   } catch (error) {
-    console.error('Sentiment analysis error:', error);
-    return ResponseHelper.errorResponse('Sentiment analysis failed', 'AI_ERROR', null, 500, env);
+    console.error('Sentiment analysis job creation error:', error);
+    await RateLimiter.recordUsage(env, apiKey.key_id, user.id, '/api/ai/sentiment', 'POST', 500, Date.now() - startTime);
+    return ResponseHelper.errorResponse('Failed to create sentiment analysis job', 'JOB_CREATION_ERROR', { details: (error as Error).message }, 500, env);
   }
 }
 
+// =Function: 
+// 
 async function handleGenerateInsights(request: Request, env: Env, user: User, apiKey: ApiKey): Promise<Response> {
   try {
     if (!env.AI) {
@@ -1300,15 +2753,53 @@ async function handleGenerateInsights(request: Request, env: Env, user: User, ap
       return ResponseHelper.errorResponse('Missing source_id', 'VALIDATION_ERROR', validation.errors, 400, env);
     }
     const body = validation.data as { source_id: number };
-    const summary = await env.DB.prepare(`SELECT ds.source_name, ds.row_count, COUNT(rd.id) as actual_rows FROM data_sources ds LEFT JOIN raw_data rd ON rd.source_id = ds.id WHERE ds.id = ? AND ds.client_id = ? GROUP BY ds.id`).bind(body.source_id, user.client_id).first<{ source_name: string; row_count: number; actual_rows: number; }>();
-    if (!summary) {
+    // 1. Get Data Source Info
+    const source = await env.DB.prepare(
+      `SELECT source_name, row_count FROM data_sources WHERE id = ? AND client_id = ?`
+    ).bind(body.source_id, user.client_id).first<{ source_name: string; row_count: number; }>();
+    if (!source) {
       return ResponseHelper.errorResponse('Data source not found', 'NOT_FOUND', null, 404, env);
     }
-    const aiResponse = await env.AI.run('@cf/meta/llama-3-8b-instruct', { messages: [{ role: 'system', content: 'You are a business intelligence analyst. Generate 3-5 actionable insights and recommendations based on data summaries.' }, { role: 'user', content: `Data source: ${summary.source_name}\nTotal records: ${summary.row_count}\n\nGenerate business insights and recommendations.` }], max_tokens: 256 });
-    return ResponseHelper.jsonResponse({ success: true, source: summary.source_name, insights: aiResponse.response, generated_at: new Date().toISOString() }, 200, env);
+    // 2. Fetch a SAMPLE of the data (e.g., first 50 rows)
+    const dataSample = await env.DB.prepare(
+      `SELECT data_row FROM raw_data WHERE source_id = ? LIMIT 50`
+    ).bind(body.source_id).all<{ data_row: string }>();
+    if (!dataSample || dataSample.results.length === 0) {
+      return ResponseHelper.errorResponse('Data source is empty', 'NO_DATA', null, 404, env);
+    }
+    // 3. Parse the data sample
+    const parsedData = dataSample.results.map(row => JSON.parse(row.data_row));
+    const dataString = JSON.stringify(parsedData, null, 2); // Pretty-print JSON for the AI
+    // 4. Create the AI prompt WITH the data
+    const prompt = `
+You are a business intelligence analyst.
+A user has provided a sample of their data (up to 50 rows).
+Generate 3-5 actionable insights and recommendations based ONLY on this data.
+---DATA SUMMARY---
+Data source: ${source.source_name}
+Total records: ${source.row_count}
+Sample records: ${parsedData.length}
+---DATA SAMPLE (JSON)---
+${dataString}
+-------------------------
+Generate business insights and recommendations:
+`;
+    const aiResponse = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+      messages: [
+        { role: 'system', content: 'You are a business intelligence analyst. Generate 3-5 actionable insights and recommendations based on data summaries.' },
+        { role: 'user', content: prompt }
+      ],
+      max_tokens: 1024 // Give it more room to generate good insights
+    });
+    return ResponseHelper.jsonResponse({
+      success: true,
+      source: source.source_name,
+      insights: aiResponse.response,
+      generated_at: new Date().toISOString()
+    }, 200, env);
   } catch (error) {
     console.error('Insight generation error:', error);
-    return ResponseHelper.errorResponse('Insight generation failed', 'AI_ERROR', null, 500, env);
+    return ResponseHelper.errorResponse('Insight generation failed', 'AI_ERROR', { details: (error as Error).message }, 500, env);
   }
 }
 
@@ -1377,12 +2868,12 @@ const getSwaggerHtml = (): string => `
 const getOpenApiSpec = (request: Request): any => {
   const url = new URL(request.url);
   const baseUrl = `${url.protocol}//${url.host}`;
-
+  
   return {
     openapi: '3.0.3',
     info: {
       title: 'Predictive Analytics Services API',
-      description: 'Powerful, easy-to-use tools for data management, analysis, business intelligence, machine learning, and AI services.\n\nTransform your data into actionable insights with our AI-powered API.',
+      description: 'Powerful, easy-to-use tools for data management, analysis, business intelligence, machine learning, and AI services. Transform your data into actionable insights with our AI-powered API.',
       version: '1.0.0',
       contact: { name: 'DSN Research API Support', email: 'info@dsnresearch.com', url: 'https://dsnresearch.com' },
       license: { name: 'MIT License', url: 'https://opensource.org/licenses/MIT' },
@@ -1410,11 +2901,13 @@ const getOpenApiSpec = (request: Request): any => {
       '/api/verify-email': { get: { summary: 'Verify email address', description: 'Complete email verification using the token from the signup email.', parameters: [{ name: 'token', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Email verified', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, message: { type: 'string' } } } } } }, '400': { $ref: '#/components/schemas/ErrorResponse' } } } },
       '/api/forgot-password': { post: { summary: 'Request password reset', description: 'Send a password reset email.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { email: { type: 'string', format: 'email' } }, required: ['email'] } } } }, responses: { '200': { description: 'Reset email sent if account exists' } } } },
       '/api/reset-password': { post: { summary: 'Reset password with token', description: 'Reset user password using the token from the email.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { token: { type: 'string' }, newPassword: { type: 'string' } }, required: ['token', 'newPassword'] } } } }, responses: { '200': { description: 'Password reset successful' }, '400': { $ref: '#/components/schemas/ErrorResponse' } } } },
-      '/api/payment/create-payfast': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Create PayFast Payment', description: 'Generates form data to initiate a PayFast payment.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { plan: { type: 'string' }, amount: { type: 'number' }, name: { type: 'string' }, email: { type: 'string' } } } } } }, responses: { '200': { description: 'PayFast form data created' } } } },
-      '/api/payment/create-paypal': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Create PayPal Order', description: 'Creates a PayPal order and returns an approval URL.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { plan: { type: 'string' }, amount: { type: 'number' } } } } } }, responses: { '200': { description: 'PayPal order created successfully' } } } },
+      '/api/payment/create-payfast': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Create PayFast Payment', description: 'Generates form data to initiate a PayFast payment. Price is determined server-side based on the selected plan.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { plan: { type: 'string', enum: ['basic', 'pro', 'premium', 'enterprise'] } }, required: ['plan'] } } } }, responses: { '200': { description: 'PayFast form data created' }, '503': { description: 'PayFast not configured' } } } },
+      '/api/payment/create-paypal': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Create PayPal Order', description: 'Creates a PayPal order and returns an approval URL. Price is determined server-side based on the selected plan.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { plan: { type: 'string', enum: ['basic', 'pro', 'premium', 'enterprise'] } }, required: ['plan'] } } } }, responses: { '200': { description: 'PayPal order created successfully' }, '503': { description: 'PayPal not configured' } } } },
+      '/api/payment/methods': { get: { summary: 'Get available payment methods', description: 'Returns which payment methods are configured and available', responses: { '200': { description: 'Payment methods availability' } } } },
       '/api/data/upload': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Upload data', description: 'Upload structured data for analysis. Max 10,000 rows.', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/DataUploadRequest' } } } }, responses: { '200': { description: 'Data uploaded successfully' }, '400': { $ref: '#/components/schemas/ErrorResponse' }, '429': { $ref: '#/components/schemas/ErrorResponse' } } } },
       '/api/data/sources': { get: { security: [{ ApiKeyAuth: [] }], summary: 'List data sources', description: 'Get all data sources for your client with pagination.', parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 100 } }, { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } }], responses: { '200': { description: 'List of data sources' } } } },
-      '/api/analytics/query': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Run analytics query', description: 'Start an analytics job (e.g., descriptive stats, forecasting).', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { source_id: { type: 'integer' }, analysis_type: { type: 'string', enum: ['descriptive', 'predictive', 'clustering'] }, parameters: { type: 'object' } }, required: ['source_id', 'analysis_type'] } } } }, responses: { '200': { description: 'Job created and completed' } } } },
+      '/api/analytics/query': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Create analytics job', description: 'Start an analytics job (e.g., descriptive stats, forecasting). Returns job_id for polling results.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { source_id: { type: 'integer' }, analysis_type: { type: 'string', enum: ['descriptive', 'predictive', 'clustering'] }, parameters: { type: 'object' } }, required: ['source_id', 'analysis_type'] } } } }, responses: { '202': { description: 'Job created successfully' }, '400': { $ref: '#/components/schemas/ErrorResponse' }, '429': { $ref: '#/components/schemas/ErrorResponse' } } } },
+      '/api/analytics/results/{job_id}': { get: { security: [{ ApiKeyAuth: [] }], summary: 'Get job results', description: 'Poll for the status and results of an analytics job.', parameters: [{ name: 'job_id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Job status and results' }, '400': { $ref: '#/components/schemas/ErrorResponse' }, '403': { $ref: '#/components/schemas/ErrorResponse' }, '404': { $ref: '#/components/schemas/ErrorResponse' } } } },
       '/api/models/predict': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Generate prediction', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { model_id: { type: 'integer' }, input_data: { type: 'object' } }, required: ['model_id', 'input_data'] } } } }, responses: { '200': { description: 'Prediction result' } } } },
       '/api/reports/generate': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Generate report', description: 'Create a business intelligence report from your data sources.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { report_type: { type: 'string', enum: ['monthly', 'quarterly', 'custom'] }, parameters: { type: 'object' } }, required: ['report_type'] } } } }, responses: { '200': { description: 'Report generated' } } } },
       '/api/ai/query': { post: { security: [{ ApiKeyAuth: [] }], summary: 'Ask AI about your data', description: 'Use natural language to query insights from your datasets.', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { query: { type: 'string', example: 'What are the top trends in my sales data?' }, source_id: { type: 'integer' } }, required: ['query', 'source_id'] } } } }, responses: { '200': { description: 'AI response' } } } },
@@ -1433,7 +2926,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': config.ALLOWED_ORIGINS || '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key', 'Access-Control-Max-Age': '86400' } });
   }
-
+  
   // Public & Docs Endpoints
   if (request.method === 'POST' && path === '/api/signup') return handleSignup(request, config);
   if (request.method === 'POST' && path === '/api/login') return handleLogin(request, config);
@@ -1442,6 +2935,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && path === '/api/reset-password') return handleResetPassword(request, config);
   if (request.method === 'POST' && path === '/api/payment/payfast-webhook') return handlePayFastWebhook(request, config);
   if (request.method === 'POST' && path === '/api/payment/paypal-webhook') return handlePayPalWebhook(request, config);
+  if (request.method === 'GET' && path === '/api/payment/methods') return handleGetPaymentMethods(config);
   if (path === '/health') return handleHealthCheck(config);
   if (path === '/docs' || path === '/swagger' || path === '/api-docs') return new Response(getSwaggerHtml(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   if (path === '/openapi.json') return ResponseHelper.jsonResponse(getOpenApiSpec(request), 200, config);
@@ -1453,6 +2947,12 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       return ResponseHelper.errorResponse('Authentication required', 'UNAUTHORIZED', null, 401, config);
     }
     const { user, apiKey } = authResult;
+    // ✅ NEW: Results polling endpoint with regex matching
+    const resultsMatch = path.match(/^\/api\/analytics\/results\/(\d+)$/);
+    if (resultsMatch && request.method === 'GET') {
+      const jobId = resultsMatch[1];
+      return handleAnalyticsResults(request, config, user, apiKey, jobId);
+    }
     switch (path) {
       case '/api/data/upload': if (request.method === 'POST') return handleDataUpload(request, config, user, apiKey); break;
       case '/api/data/sources': if (request.method === 'GET') return handleDataSources(request, config, user, apiKey); break;
@@ -1475,7 +2975,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       version: '1.0.0',
       environment: config.ENVIRONMENT,
       endpoints: {
-        'POST /api/signup': 'Create new account', 'POST /api/login': 'User login', 'GET /api/verify-email': 'Verify email address', 'POST /api/forgot-password': 'Request password reset', 'POST /api/reset-password': 'Reset password with token', 'POST /api/payment/create-payfast': 'Create a PayFast payment session', 'POST /api/payment/create-paypal': 'Create a PayPal payment order', 'PUT /api/user/plan': 'Update user plan (downgrade to free)', 'POST /api/data/upload': 'Upload data for processing', 'GET /api/data/sources': 'List data sources', 'POST /api/analytics/query': 'Run analytics queries', 'POST /api/models/predict': 'Generate predictions', 'POST /api/reports/generate': 'Generate reports', 'POST /api/ai/query': 'Ask AI about your data', 'POST /api/ai/sentiment': 'Analyze sentiment of text', 'POST /api/ai/insights': 'Generate business insights from data',
+        'POST /api/signup': 'Create new account', 'POST /api/login': 'User login', 'GET /api/verify-email': 'Verify email address', 'POST /api/forgot-password': 'Request password reset', 'POST /api/reset-password': 'Reset password with token', 'POST /api/payment/create-payfast': 'Create a PayFast payment session (server-side pricing)', 'POST /api/payment/create-paypal': 'Create a PayPal payment order (server-side pricing)', 'GET /api/payment/methods': 'Check available payment methods', 'PUT /api/user/plan': 'Update user plan (downgrade to free)', 'POST /api/data/upload': 'Upload data for processing', 'GET /api/data/sources': 'List data sources', 'POST /api/analytics/query': 'Create analytics job (async)', 'GET /api/analytics/results/:job_id': 'Check job status and get results', 'POST /api/models/predict': 'Generate predictions', 'POST /api/reports/generate': 'Generate reports', 'POST /api/ai/query': 'Ask AI about your data', 'POST /api/ai/sentiment': 'Analyze sentiment of text', 'POST /api/ai/insights': 'Generate business insights from data',
       },
       documentation: {
         'GET /docs': 'Interactive API documentation (Swagger UI)', 'GET /openapi.json': 'OpenAPI specification', 'GET /health': 'Health check endpoint',
@@ -1496,4 +2996,35 @@ export default {
       return ResponseHelper.errorResponse('Internal server error', 'INTERNAL_ERROR', null, 500);
     }
   },
+
+  // ✅ ADD THIS: Scheduled handler for cron triggers
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    console.log('[Cron] Scheduled trigger fired at:', new Date(event.scheduledTime).toISOString());
+    
+    // Execute job processing
+    ctx.waitUntil(
+      processAnalyticsJobs(env)
+        .then(() => {
+          console.log('[Cron] Job processing cycle completed');
+        })
+        .catch((error) => {
+          console.error('[Cron] Job processing failed:', error);
+        })
+    );
+  }
 };
+
+// =================================
+// TYPES FOR SCHEDULED EVENT
+// Add these types to your project
+// =================================
+
+interface ScheduledEvent {
+  scheduledTime: number;
+  cron: string;
+}
+
+interface ExecutionContext {
+  waitUntil(promise: Promise<any>): void;
+  passThroughOnException(): void;
+}
