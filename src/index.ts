@@ -869,6 +869,50 @@ async function authenticate(request: Request, env: Env): Promise<AuthResult | nu
   }
 }
 
+// PASTE THIS NEW FUNCTION INTO src/index.ts
+
+/**
+ * Authenticates a user based on a JWT session token.
+ */
+async function authenticateUser(request: Request, env: Env): Promise<User | null> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('User auth failed: No Bearer token');
+    return null;
+  }
+
+  const token = authHeader.replace('Bearer ', '').trim();
+  if (!token) {
+    console.log('User auth failed: Token is empty');
+    return null;
+  }
+
+  try {
+    const payload = await JWTManager.verifyJwt(token, env.JWT_SECRET);
+    if (!payload || !payload.userId) {
+      console.log('User auth failed: Invalid JWT payload');
+      return null;
+    }
+
+    // Fetch the user from the DB to make sure they are real and active
+    const user = await env.DB.prepare(
+      `SELECT * FROM users WHERE id = ? AND is_active = 1`
+    ).bind(payload.userId).first<User>();
+
+    if (!user) {
+      console.log(`User auth failed: User ${payload.userId} not found or inactive`);
+      return null;
+    }
+    
+    // console.log(`User ${user.id} authenticated successfully via JWT`);
+    return user;
+
+  } catch (error) {
+    console.error('User auth error:', error);
+    return null;
+  }
+}
+
 // ================= HEALTH CHECK =================
 async function handleHealthCheck(env: Env): Promise<Response> {
   try {
@@ -2946,13 +2990,13 @@ const getOpenApiSpec = (request: Request): any => {
 };
 
 // ================= MAIN REQUEST HANDLER =================
-// ================= MAIN REQUEST HANDLER =================
+
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const config = Config.validate(env);
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // --- START: NEW DYNAMIC CORS LOGIC ---
+  // --- START: DYNAMIC CORS LOGIC ---
   const allowedOrigins = (config.ALLOWED_ORIGINS || '')
     .split(',')
     .map(s => s.trim())
@@ -2968,22 +3012,19 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     if (corsOrigin) {
       return new Response(null, {
         headers: {
-          'Access-Control-Allow-Origin': corsOrigin, // Reflect the valid origin
+          'Access-Control-Allow-Origin': corsOrigin,
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
           'Access-Control-Max-Age': '86400',
         },
       });
     }
-    // Fail preflight if origin is not in the list
     return new Response('Invalid CORS origin', { status: 403 });
   }
 
   // 2. Define a helper to wrap the response
-  // This function will call your router and then apply the CORS header
   const handleAndApplyCORS = async (): Promise<Response> => {
-    // --- START: Your original routing logic ---
-    // Public & Docs Endpoints
+    // --- Public & Docs Endpoints (No changes) ---
     if (request.method === 'POST' && path === '/api/signup')
       return handleSignup(request, config);
     if (request.method === 'POST' && path === '/api/login')
@@ -3008,10 +3049,16 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     if (path === '/openapi.json')
       return ResponseHelper.jsonResponse(getOpenApiSpec(request), 200, config);
 
-    // Authenticated Endpoints
-    if (path.startsWith('/api/')) {
-      const authResult = await authenticate(request, config);
-      if (!authResult) {
+    // --- START: NEW AUTHENTICATED ROUTING ---
+
+    // Block 1: User-facing, session-based (JWT) endpoints
+    if (
+      path.startsWith('/api/payment/create-') ||
+      path.startsWith('/api/user/')
+    ) {
+      // Use the new JWT authenticator
+      const user = await authenticateUser(request, config); 
+      if (!user) {
         return ResponseHelper.errorResponse(
           'Authentication required',
           'UNAUTHORIZED',
@@ -3020,13 +3067,52 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
           config
         );
       }
+
+      // User is authenticated, route to the handler
+      switch (path) {
+        case '/api/payment/create-payfast':
+          if (request.method === 'POST')
+            return handleCreatePayFastPayment(request, config, user);
+          break;
+        case '/api/payment/create-paypal':
+          if (request.method === 'POST')
+            return handleCreatePayPalPayment(request, config, user);
+          break;
+        case '/api/user/plan':
+          if (request.method === 'PUT')
+            return handleUpdateUserPlan(request, config, user);
+          break;
+      }
+    }
+
+    // Block 2: API-key-based (X-API-Key) endpoints
+    if (
+      path.startsWith('/api/data/') ||
+      path.startsWith('/api/models/') ||
+      path.startsWith('/api/analytics/') ||
+      path.startsWith('/api/ai/') ||
+      path.startsWith('/api/reports/')
+    ) {
+      // Use the existing API key authenticator
+      const authResult = await authenticate(request, config); 
+      if (!authResult) {
+        return ResponseHelper.errorResponse(
+          'Authentication required. Invalid API Key.',
+          'UNAUTHORIZED',
+          null,
+          401,
+          config
+        );
+      }
       const { user, apiKey } = authResult;
-      // ✅ NEW: Results polling endpoint with regex matching
+
+      // API key is authenticated, route to the handler
       const resultsMatch = path.match(/^\/api\/analytics\/results\/(\d+)$/);
       if (resultsMatch && request.method === 'GET') {
         const jobId = resultsMatch[1];
         return handleAnalyticsResults(request, config, user, apiKey, jobId);
       }
+
       switch (path) {
         case '/api/data/upload':
           if (request.method === 'POST')
@@ -3060,20 +3146,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
           if (request.method === 'POST')
             return handleReportGenerate(request, config, user, apiKey);
           break;
-        case '/api/payment/create-payfast':
-          if (request.method === 'POST')
-            return handleCreatePayFastPayment(request, config, user);
-          break;
-        case '/api/payment/create-paypal':
-          if (request.method === 'POST')
-            return handleCreatePayPalPayment(request, config, user);
-          break;
-        case '/api/user/plan':
-          if (request.method === 'PUT')
-            return handleUpdateUserPlan(request, config, user);
-          break;
       }
     }
+    
+    // --- END: NEW AUTHENTICATED ROUTING ---
 
     // Root Endpoint
     if (path === '/' || path === '/api') {
