@@ -68,7 +68,7 @@ database_id = "d6fcbd8e-b005-4d75-8a00-08504b8c53d1"
 [env.production.vars]
 ENVIRONMENT = "production"
 FRONTEND_URL = "https://dsnresearch.com"
-ALLOWED_ORIGINS = "https://dsnresearch.com"
+ALLOWED_ORIGINS = "https://dsnresearch.com,https://www.dsnresearch.com"
 PAYPAL_MODE = "live"
 PAYFAST_MODE = "live"
 

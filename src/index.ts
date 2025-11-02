@@ -698,13 +698,35 @@ class RateLimiter {
 
 // ================= RESPONSE HELPERS =================
 class ResponseHelper {
+  // ✅ MODIFIED: Removed the static 'Access-Control-Allow-Origin' header.
+  // We will add this dynamically in the main request handler.
   static jsonResponse(data: any, status: number = 200, env?: Env): Response {
-    const response = new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': env?.ALLOWED_ORIGINS || '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key', 'Access-Control-Max-Age': '86400' } });
+    const response = new Response(JSON.stringify(data), {
+      status,
+      headers: {
+        'Content-Type': 'application/json',
+        // 'Access-Control-Allow-Origin': env?.ALLOWED_ORIGINS || '*', // ← REMOVED THIS LINE
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+        'Access-Control-Max-Age': '86400',
+      },
+    });
     return ResponseHelper.securityHeaders(response);
   }
 
-  static errorResponse(message: string, code: string = 'GENERIC_ERROR', details?: any, status: number = 400, env?: Env): Response {
-    return this.jsonResponse({ error: message, code, details, success: false }, status, env);
+  static errorResponse(
+    message: string,
+    code: string = 'GENERIC_ERROR',
+    details?: any,
+    status: number = 400,
+    env?: Env
+  ): Response {
+    // This function will now correctly call the modified jsonResponse
+    return this.jsonResponse(
+      { error: message, code, details, success: false },
+      status,
+      env
+    );
   }
 
   static securityHeaders(response: Response): Response {
@@ -712,12 +734,18 @@ class ResponseHelper {
     headers.set('X-Content-Type-Options', 'nosniff');
     headers.set('X-Frame-Options', 'DENY');
     headers.set('X-XSS-Protection', '1; mode=block');
-    headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    headers.set(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains'
+    );
     headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     headers.set('Content-Security-Policy', "default-src 'none'");
     headers.delete('server');
     headers.delete('x-powered-by');
-    return new Response(response.body, { status: response.status, headers: headers });
+    return new Response(response.body, {
+      status: response.status,
+      headers: headers,
+    });
   }
 }
 
@@ -2918,73 +2946,195 @@ const getOpenApiSpec = (request: Request): any => {
 };
 
 // ================= MAIN REQUEST HANDLER =================
+// ================= MAIN REQUEST HANDLER =================
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const config = Config.validate(env);
   const url = new URL(request.url);
   const path = url.pathname;
 
+  // --- START: NEW DYNAMIC CORS LOGIC ---
+  const allowedOrigins = (config.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  const requestOrigin = request.headers.get('Origin');
+  const corsOrigin =
+    requestOrigin && allowedOrigins.includes(requestOrigin)
+      ? requestOrigin
+      : null;
+
+  // 1. Handle OPTIONS (preflight) requests
   if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: { 'Access-Control-Allow-Origin': config.ALLOWED_ORIGINS || '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key', 'Access-Control-Max-Age': '86400' } });
-  }
-  
-  // Public & Docs Endpoints
-  if (request.method === 'POST' && path === '/api/signup') return handleSignup(request, config);
-  if (request.method === 'POST' && path === '/api/login') return handleLogin(request, config);
-  if (request.method === 'GET' && path === '/api/verify-email') return handleVerifyEmail(request, config);
-  if (request.method === 'POST' && path === '/api/forgot-password') return handleForgotPassword(request, config);
-  if (request.method === 'POST' && path === '/api/reset-password') return handleResetPassword(request, config);
-  if (request.method === 'POST' && path === '/api/payment/payfast-webhook') return handlePayFastWebhook(request, config);
-  if (request.method === 'POST' && path === '/api/payment/paypal-webhook') return handlePayPalWebhook(request, config);
-  if (request.method === 'GET' && path === '/api/payment/methods') return handleGetPaymentMethods(config);
-  if (path === '/health') return handleHealthCheck(config);
-  if (path === '/docs' || path === '/swagger' || path === '/api-docs') return new Response(getSwaggerHtml(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-  if (path === '/openapi.json') return ResponseHelper.jsonResponse(getOpenApiSpec(request), 200, config);
-
-  // Authenticated Endpoints
-  if (path.startsWith('/api/')) {
-    const authResult = await authenticate(request, config);
-    if (!authResult) {
-      return ResponseHelper.errorResponse('Authentication required', 'UNAUTHORIZED', null, 401, config);
+    if (corsOrigin) {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': corsOrigin, // Reflect the valid origin
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
     }
-    const { user, apiKey } = authResult;
-    // ✅ NEW: Results polling endpoint with regex matching
-    const resultsMatch = path.match(/^\/api\/analytics\/results\/(\d+)$/);
-    if (resultsMatch && request.method === 'GET') {
-      const jobId = resultsMatch[1];
-      return handleAnalyticsResults(request, config, user, apiKey, jobId);
-    }
-    switch (path) {
-      case '/api/data/upload': if (request.method === 'POST') return handleDataUpload(request, config, user, apiKey); break;
-      case '/api/data/sources': if (request.method === 'GET') return handleDataSources(request, config, user, apiKey); break;
-      case '/api/models/predict': if (request.method === 'POST') return handleModelPredict(request, config, user, apiKey); break;
-      case '/api/analytics/query': if (request.method === 'POST') return handleAnalyticsQuery(request, config, user, apiKey); break;
-      case '/api/ai/query': if (request.method === 'POST') return handleAIQuery(request, config, user, apiKey); break;
-      case '/api/ai/sentiment': if (request.method === 'POST') return handleSentimentAnalysis(request, config, user, apiKey); break;
-      case '/api/ai/insights': if (request.method === 'POST') return handleGenerateInsights(request, config, user, apiKey); break;
-      case '/api/reports/generate': if (request.method === 'POST') return handleReportGenerate(request, config, user, apiKey); break;
-      case '/api/payment/create-payfast': if (request.method === 'POST') return handleCreatePayFastPayment(request, config, user); break;
-      case '/api/payment/create-paypal': if (request.method === 'POST') return handleCreatePayPalPayment(request, config, user); break;
-      case '/api/user/plan': if (request.method === 'PUT') return handleUpdateUserPlan(request, config, user); break;
-    }
+    // Fail preflight if origin is not in the list
+    return new Response('Invalid CORS origin', { status: 403 });
   }
 
-  // Root Endpoint
-  if (path === '/' || path === '/api') {
-    return ResponseHelper.jsonResponse({
-      name: 'Predictive Analytics API',
-      version: '1.0.0',
-      environment: config.ENVIRONMENT,
-      endpoints: {
-        'POST /api/signup': 'Create new account', 'POST /api/login': 'User login', 'GET /api/verify-email': 'Verify email address', 'POST /api/forgot-password': 'Request password reset', 'POST /api/reset-password': 'Reset password with token', 'POST /api/payment/create-payfast': 'Create a PayFast payment session (server-side pricing)', 'POST /api/payment/create-paypal': 'Create a PayPal payment order (server-side pricing)', 'GET /api/payment/methods': 'Check available payment methods', 'PUT /api/user/plan': 'Update user plan (downgrade to free)', 'POST /api/data/upload': 'Upload data for processing', 'GET /api/data/sources': 'List data sources', 'POST /api/analytics/query': 'Create analytics job (async)', 'GET /api/analytics/results/:job_id': 'Check job status and get results', 'POST /api/models/predict': 'Generate predictions', 'POST /api/reports/generate': 'Generate reports', 'POST /api/ai/query': 'Ask AI about your data', 'POST /api/ai/sentiment': 'Analyze sentiment of text', 'POST /api/ai/insights': 'Generate business insights from data',
-      },
-      documentation: {
-        'GET /docs': 'Interactive API documentation (Swagger UI)', 'GET /openapi.json': 'OpenAPI specification', 'GET /health': 'Health check endpoint',
-      },
-      authentication: 'Include X-API-Key header or Authorization: Bearer {token}',
-    }, 200, config);
-  }
+  // 2. Define a helper to wrap the response
+  // This function will call your router and then apply the CORS header
+  const handleAndApplyCORS = async (): Promise<Response> => {
+    // --- START: Your original routing logic ---
+    // Public & Docs Endpoints
+    if (request.method === 'POST' && path === '/api/signup')
+      return handleSignup(request, config);
+    if (request.method === 'POST' && path === '/api/login')
+      return handleLogin(request, config);
+    if (request.method === 'GET' && path === '/api/verify-email')
+      return handleVerifyEmail(request, config);
+    if (request.method === 'POST' && path === '/api/forgot-password')
+      return handleForgotPassword(request, config);
+    if (request.method === 'POST' && path === '/api/reset-password')
+      return handleResetPassword(request, config);
+    if (request.method === 'POST' && path === '/api/payment/payfast-webhook')
+      return handlePayFastWebhook(request, config);
+    if (request.method === 'POST' && path === '/api/payment/paypal-webhook')
+      return handlePayPalWebhook(request, config);
+    if (request.method === 'GET' && path === '/api/payment/methods')
+      return handleGetPaymentMethods(config);
+    if (path === '/health') return handleHealthCheck(config);
+    if (path === '/docs' || path === '/swagger' || path === '/api-docs')
+      return new Response(getSwaggerHtml(), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    if (path === '/openapi.json')
+      return ResponseHelper.jsonResponse(getOpenApiSpec(request), 200, config);
 
-  return ResponseHelper.errorResponse('Not found', 'NOT_FOUND', null, 404, config);
+    // Authenticated Endpoints
+    if (path.startsWith('/api/')) {
+      const authResult = await authenticate(request, config);
+      if (!authResult) {
+        return ResponseHelper.errorResponse(
+          'Authentication required',
+          'UNAUTHORIZED',
+          null,
+          401,
+          config
+        );
+      }
+      const { user, apiKey } = authResult;
+      // ✅ NEW: Results polling endpoint with regex matching
+      const resultsMatch = path.match(/^\/api\/analytics\/results\/(\d+)$/);
+      if (resultsMatch && request.method === 'GET') {
+        const jobId = resultsMatch[1];
+        return handleAnalyticsResults(request, config, user, apiKey, jobId);
+      }
+      switch (path) {
+        case '/api/data/upload':
+          if (request.method === 'POST')
+            return handleDataUpload(request, config, user, apiKey);
+          break;
+        case '/api/data/sources':
+          if (request.method === 'GET')
+            return handleDataSources(request, config, user, apiKey);
+          break;
+        case '/api/models/predict':
+          if (request.method === 'POST')
+            return handleModelPredict(request, config, user, apiKey);
+          break;
+        case '/api/analytics/query':
+          if (request.method === 'POST')
+            return handleAnalyticsQuery(request, config, user, apiKey);
+          break;
+        case '/api/ai/query':
+          if (request.method === 'POST')
+            return handleAIQuery(request, config, user, apiKey);
+          break;
+        case '/api/ai/sentiment':
+          if (request.method === 'POST')
+            return handleSentimentAnalysis(request, config, user, apiKey);
+          break;
+        case '/api/ai/insights':
+          if (request.method === 'POST')
+            return handleGenerateInsights(request, config, user, apiKey);
+          break;
+        case '/api/reports/generate':
+          if (request.method === 'POST')
+            return handleReportGenerate(request, config, user, apiKey);
+          break;
+        case '/api/payment/create-payfast':
+          if (request.method === 'POST')
+            return handleCreatePayFastPayment(request, config, user);
+          break;
+        case '/api/payment/create-paypal':
+          if (request.method === 'POST')
+            return handleCreatePayPalPayment(request, config, user);
+          break;
+        case '/api/user/plan':
+          if (request.method === 'PUT')
+            return handleUpdateUserPlan(request, config, user);
+          break;
+      }
+    }
+
+    // Root Endpoint
+    if (path === '/' || path === '/api') {
+      return ResponseHelper.jsonResponse(
+        {
+          name: 'Predictive Analytics API',
+          version: '1.0.0',
+          environment: config.ENVIRONMENT,
+          endpoints: {
+            'POST /api/signup': 'Create new account',
+            'POST /api/login': 'User login',
+            'GET /api/verify-email': 'Verify email address',
+            'POST /api/forgot-password': 'Request password reset',
+            'POST /api/reset-password': 'Reset password with token',
+            'POST /api/payment/create-payfast':
+              'Create a PayFast payment session (server-side pricing)',
+            'POST /api/payment/create-paypal':
+              'Create a PayPal payment order (server-side pricing)',
+            'GET /api/payment/methods': 'Check available payment methods',
+            'PUT /api/user/plan': 'Update user plan (downgrade to free)',
+            'POST /api/data/upload': 'Upload data for processing',
+            'GET /api/data/sources': 'List data sources',
+            'POST /api/analytics/query': 'Create analytics job (async)',
+            'GET /api/analytics/results/:job_id':
+              'Check job status and get results',
+            'POST /api/models/predict': 'Generate predictions',
+            'POST /api/reports/generate': 'Generate reports',
+            'POST /api/ai/query': 'Ask AI about your data',
+            'POST /api/ai/sentiment': 'Analyze sentiment of text',
+            'POST /api/ai/insights':
+              'Generate business insights from data',
+          },
+          documentation: {
+            'GET /docs': 'Interactive API documentation (Swagger UI)',
+            'GET /openapi.json': 'OpenAPI specification',
+            'GET /health': 'Health check endpoint',
+          },
+          authentication: 'Include X-API-Key header or Authorization: Bearer {token}',
+        },
+        200,
+        config
+      );
+    }
+
+    return ResponseHelper.errorResponse(
+      'Not found',
+      'NOT_FOUND',
+      null,
+      404,
+      config
+    );
+    // --- END: Your original routing logic ---
+  };
+
+  // 3. Call the router and apply the final CORS header
+  const response = await handleAndApplyCORS();
+  if (corsOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', corsOrigin);
+  }
+  return response;
+  // --- END: NEW DYNAMIC CORS LOGIC ---
 }
 
 export default {
