@@ -1,0 +1,8 @@
+# cloudflared/config.yml
+tunnel: dsnresearch-tunnel
+credentials-file: /Users/docnd/.cloudflared/349f1073-5d63-4f7e-97ee-f122462e0775.json
+
+ingress:
+  - hostname: dev-api.data-analytics-api-prod.sibusiso-ndzukuma.workers.dev
+    service: http://localhost:8787
+  - service: http_status:404
