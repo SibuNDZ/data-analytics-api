@@ -366,16 +366,20 @@ class PayFastHelper {
 
   static async generateSignature(data: Record<string, string>, passPhrase: string = ''): Promise<string> {
     let pfOutput = '';
-    for (const key in data) {
-      if (data.hasOwnProperty(key) && key !== 'signature') {
-        const value = String(data[key]).trim();
-        pfOutput += `${key}=${encodeURIComponent(value).replace(/%20/g, '+')}&`;
-      }
+    // ✅ CRITICAL FIX: PayFast requires parameters in alphabetical order
+    const sortedKeys = Object.keys(data)
+      .filter(key => key !== 'signature')
+      .sort();
+    
+    for (const key of sortedKeys) {
+      const value = String(data[key]).trim();
+      pfOutput += `${key}=${encodeURIComponent(value).replace(/%20/g, '+')}&`;
     }
     pfOutput = pfOutput.slice(0, -1);
     if (passPhrase) {
       pfOutput += `&passphrase=${encodeURIComponent(passPhrase.trim()).replace(/%20/g, '+')}`;
     }
+    console.log('[PayFast] Signature string:', pfOutput); // Debug log
     return this.md5(pfOutput);
   }
 
@@ -1271,7 +1275,7 @@ async function handleCreatePayFastPayment(request: Request, env: Env, user: User
     // Convert to ZAR (use real-time API in production)
     async function getExchangeRate(): Promise<number> {
       try {
-        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD  ');
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
         const data = await response.json() as { rates: { ZAR: number } };
         return data.rates.ZAR;
       } catch (error) {
