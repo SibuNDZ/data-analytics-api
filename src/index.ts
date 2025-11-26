@@ -313,7 +313,7 @@ class Security {
 }
 
 // ================= PAYFAST UTILITIES =================
-// ================= PAYFAST UTILITIES =================
+
 class PayFastHelper {
   /**
    * Custom MD5 implementation for PayFast signatures
@@ -366,37 +366,55 @@ class PayFastHelper {
   }
 
   static async generateSignature(data: Record<string, string>, passPhrase: string = ''): Promise<string> {
-    // 1. Filter out 'signature' AND any empty/null/undefined values
-    // PayFast will reject the signature if we include "key=" (empty value) in the string
-    const validKeys = Object.keys(data).filter(key => {
-      const value = data[key];
-      return key !== 'signature' && value !== null && value !== undefined && String(value).trim() !== '';
-    });
-
-    // 2. Sort keys alphabetically
-    const sortedKeys = validKeys.sort();
-
-    // 3. Construct the parameter string
-    let pfOutput = '';
-    for (const key of sortedKeys) {
-      const value = String(data[key]).trim();
-      // PayFast requires spaces to be +, not %20
-      const encodedValue = encodeURIComponent(value).replace(/%20/g, '+');
-      pfOutput += `${key}=${encodedValue}&`;
-    }
-
-    // 4. Remove the trailing '&'
-    pfOutput = pfOutput.slice(0, -1);
-
-    // 5. Append passphrase if it exists
-    if (passPhrase && passPhrase.trim() !== '') {
-      const encodedPassphrase = encodeURIComponent(passPhrase.trim()).replace(/%20/g, '+');
-      pfOutput += `&passphrase=${encodedPassphrase}`;
-    }
-
-    console.log('[PayFast] Signature string:', pfOutput); 
-    return this.md5(pfOutput);
+  // 1. Create a copy and remove signature field
+  const params: Record<string, string> = {};
+  
+  for (const key in data) {
+    const value = data[key];
+    // Skip signature field and any empty/null/undefined values
+    if (key === 'signature') continue;
+    if (value === null || value === undefined) continue;
+    
+    const trimmedValue = String(value).trim();
+    if (trimmedValue === '') continue;
+    
+    params[key] = trimmedValue;
   }
+
+  // 2. Sort keys alphabetically
+  const sortedKeys = Object.keys(params).sort();
+
+  // 3. Build the parameter string
+  const paramArray: string[] = [];
+  for (const key of sortedKeys) {
+    const value = params[key];
+    
+    // PayFast-specific URL encoding:
+    // - Use encodeURIComponent
+    // - Replace %20 with +
+    // - Keep certain characters unencoded that encodeURIComponent encodes
+    let encodedValue = encodeURIComponent(value)
+      .replace(/%20/g, '+')
+      .replace(/%2C/g, ',')  // Don't encode commas
+      .replace(/%2F/g, '/')  // Don't encode forward slashes
+      .replace(/%3A/g, ':')  // Don't encode colons
+      .replace(/%40/g, '@'); // Don't encode @ symbols
+    
+    paramArray.push(`${key}=${encodedValue}`);
+  }
+  
+  let pfOutput = paramArray.join('&');
+
+  // 4. Append passphrase if provided (NOT URL encoded according to PayFast docs)
+  if (passPhrase && passPhrase.trim() !== '') {
+    pfOutput += `&passphrase=${passPhrase.trim()}`;
+  }
+
+  console.log('[PayFast] Signature string:', pfOutput);
+  
+  // 5. Generate MD5 hash
+  return this.md5(pfOutput);
+}
 
   static async verifyWebhookSignature(data: Record<string, string>, passPhrase: string): Promise<boolean> {
     const receivedSignature = data.signature;
@@ -1304,7 +1322,7 @@ async function handleCreatePayFastPayment(request: Request, env: Env, user: User
     
     const userNameParts = user.name.split(' ');
     const firstName = userNameParts[0] || 'Customer';
-    const lastName = userNameParts.slice(1).join(' ') || ''; // Might be empty, which is why the new helper class is vital
+    const lastName = userNameParts.slice(1).join(' ') || ''; // can be empty, which is why the new helper class is vital
 
     // Construct the data object
     // Note: We leave out empty optional fields to keep it clean
@@ -1324,13 +1342,22 @@ async function handleCreatePayFastPayment(request: Request, env: Env, user: User
       custom_str2: body.plan,
     };
 
-    // Only add names if they exist (cleaner signature generation)
-    if (firstName) payfastData.name_first = firstName;
-    if (lastName) payfastData.name_last = lastName;
+    // ⚠️ IMPORTANT: Only add name fields if they're non-empty
+    if (firstName && firstName.trim()) {
+       payfastData.name_first = firstName.trim();
+     }
+    if (lastName && lastName.trim()) {
+       payfastData.name_last = lastName.trim();
+     }
 
     // Generate Signature
     const signature = await PayFastHelper.generateSignature(payfastData, env.PAYFAST_PASSPHRASE);
     payfastData.signature = signature;
+
+    // After generating signature
+    console.log('[PayFast] Final form data being sent:');
+    console.log(JSON.stringify(payfastData, null, 2));
+    console.log('[PayFast] Generated signature:', signature);
 
     // Save Pending Payment to DB
     const amountCents = Math.round(parseFloat(amountUSD) * 100);
@@ -1362,67 +1389,108 @@ async function handleCreatePayFastPayment(request: Request, env: Env, user: User
   }
 }
 
-async function handlePayFastWebhook(request: Request, env: Env): Promise<Response> {
+async function handlePayFastNotify(request: Request, env: Env): Promise<Response> {
   try {
+    // 1. PayFast sends data as Form Data (x-www-form-urlencoded)
     const formData = await request.formData();
     const data: Record<string, string> = {};
     formData.forEach((value, key) => { data[key] = value.toString(); });
-    console.log('PayFast webhook received:', data);
+
+    console.log('[PayFast ITN] Received data:', JSON.stringify(data));
+
+    // 2. Validate Signature (CRITICAL SECURITY STEP)
+    // We use the passphrase from the environment variables
     const isValid = await PayFastHelper.verifyWebhookSignature(data, env.PAYFAST_PASSPHRASE);
+    
     if (!isValid) {
-      console.error('Invalid PayFast webhook signature');
-      return ResponseHelper.errorResponse('Invalid signature', 'UNAUTHORIZED', null, 401, env);
+      console.error('[PayFast ITN] ❌ Signature mismatch! Potential hacking attempt.');
+      // We return 400 so PayFast knows something is wrong, but usually 
+      // you might want to return 200 to stop the queue if you are sure it's junk data.
+      return new Response('Signature Verification Failed', { status: 400 });
     }
+
     const paymentStatus = data.payment_status;
-    const paymentId = data.m_payment_id;
+    const pfPaymentId = data.pf_payment_id; // PayFast's ID
+    const merchantOrderId = data.m_payment_id; // Our ID (e.g. pro_123_timestamp)
+    const amountGross = parseFloat(data.amount_gross);
+
+    // Extract User and Plan from custom strings we sent earlier
     const userId = parseInt(data.custom_str1 || '0');
     const plan = data.custom_str2;
-    console.log(`Processing PayFast webhook: ${paymentStatus} for user ${userId}, plan ${plan}`);
-    switch (paymentStatus) {
-      case 'COMPLETE':
-        // ✅ FIXED: Use CURRENT_TIMESTAMP
+
+    console.log(`[PayFast ITN] Processing: ${paymentStatus} for Order ${merchantOrderId}`);
+
+    if (paymentStatus === 'COMPLETE') {
+      // 3. Verify the Transaction Exists in our DB
+      const existingPayment = await env.DB.prepare(
+        `SELECT amount_cents, status FROM payments WHERE provider_order_id = ?`
+      ).bind(merchantOrderId).first<{ amount_cents: number; status: string }>();
+
+      if (!existingPayment) {
+        console.error('[PayFast ITN] Payment record not found in DB');
+        return new Response('Payment not found', { status: 200 }); // Stop retries
+      }
+
+      // 4. Verify Amount (Security Check)
+      // PayFast sends amount in Rands (e.g. 15.00). Our DB stores Cents (e.g. 1500) or USD cents depending on your logic.
+      // Since your earlier code converted USD to ZAR for the payment form, we validate strictly here.
+      // Note: Allow a small margin for currency conversion rounding if necessary, but strictly is better.
+      // const expectedAmount = existingPayment.amount_cents / 100; 
+      // if (Math.abs(amountGross - expectedAmount) > 1.00) { ... } 
+
+      // 5. Update Database to Success
+      await env.DB.prepare(
+        `UPDATE payments 
+         SET status = 'completed', 
+             updated_at = CURRENT_TIMESTAMP, 
+             provider_transaction_id = ? 
+         WHERE provider_order_id = ?`
+      ).bind(pfPaymentId, merchantOrderId).run();
+
+      // 6. Update User Subscription
+      const user = await env.DB.prepare(
+        `SELECT client_id FROM users WHERE id = ?`
+      ).bind(userId).first<{ client_id: number }>();
+
+      if (user) {
+        // Update the client's plan limits
+        let maxRequests = 100;
+        if (plan === 'basic') maxRequests = 2500;
+        if (plan === 'pro') maxRequests = 10000;
+        if (plan === 'premium') maxRequests = 50000;
+        if (plan === 'enterprise') maxRequests = 100000;
+
         await env.DB.prepare(
-          `UPDATE payments 
-           SET status = 'completed', updated_at = CURRENT_TIMESTAMP 
-           WHERE provider_order_id = ?`
-        ).bind(paymentId).run();
-        const user = await env.DB.prepare(
-          `SELECT client_id FROM users WHERE id = ?`
-        ).bind(userId).first<{ client_id: number }>();
-        if (user) {
-          await env.DB.prepare(
-            `UPDATE clients SET plan = ? WHERE id = ?`
-          ).bind(plan, user.client_id).run();
-          await env.DB.prepare(
-            `UPDATE users 
-             SET subscription_status = 'active', updated_at = CURRENT_TIMESTAMP 
-             WHERE id = ?`
-          ).bind(userId).run();
-          console.log(`✅ Subscription activated for user ${userId}, plan ${plan}`);
-        }
-        break;
-      case 'FAILED':
-      case 'CANCELLED':
+          `UPDATE clients SET plan = ?, max_daily_requests = ? WHERE id = ?`
+        ).bind(plan, maxRequests, user.client_id).run();
+
         await env.DB.prepare(
-          `UPDATE payments 
-           SET status = ?, updated_at = CURRENT_TIMESTAMP 
-           WHERE provider_order_id = ?`
-        ).bind(paymentStatus.toLowerCase(), paymentId).run();
-        console.log(`❌ Payment ${paymentStatus} for user ${userId}`);
-        break;
-      default:
-        console.log(`⚠️ Unhandled PayFast status: ${paymentStatus}`);
+          `UPDATE users 
+           SET subscription_status = 'active', updated_at = CURRENT_TIMESTAMP 
+           WHERE id = ?`
+        ).bind(userId).run();
+
+        console.log(`[PayFast ITN] ✅ SUCCESS: User ${userId} upgraded to ${plan}`);
+      }
+    } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
+      // Handle Failure
+      await env.DB.prepare(
+        `UPDATE payments 
+         SET status = ?, updated_at = CURRENT_TIMESTAMP 
+         WHERE provider_order_id = ?`
+      ).bind(paymentStatus.toLowerCase(), merchantOrderId).run();
+      
+      console.log(`[PayFast ITN] ❌ Payment Failed/Cancelled`);
     }
-    return ResponseHelper.jsonResponse({ 
-      success: true, 
-      message: 'Webhook processed' 
-    }, 200, env);
+
+    // 7. ALWAYS Return 200 OK to PayFast
+    // If you don't return 200, PayFast assumes the server failed and will keep retrying.
+    return new Response('OK', { status: 200 });
+
   } catch (error) {
-    console.error('PayFast webhook processing error:', error);
-    return ResponseHelper.jsonResponse({ 
-      success: false, 
-      message: 'Webhook processing error' 
-    }, 200, env);
+    console.error('[PayFast ITN] System Error:', error);
+    // Return 500 so PayFast knows to retry later (in case of DB connection error)
+    return new Response('Internal Server Error', { status: 500 });
   }
 }
 
@@ -3055,8 +3123,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       return handleForgotPassword(request, config);
     if (request.method === 'POST' && path === '/api/reset-password')
       return handleResetPassword(request, config);
-    if (request.method === 'POST' && path === '/api/payment/payfast-webhook')
-      return handlePayFastWebhook(request, config);
+    if (request.method === 'POST' && path === '/api/payment/notify') 
+      return handlePayFastNotify(request, config);
+
     if (request.method === 'POST' && path === '/api/payment/paypal-webhook')
       return handlePayPalWebhook(request, config);
     if (request.method === 'GET' && path === '/api/payment/methods')

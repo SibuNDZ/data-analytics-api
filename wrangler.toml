@@ -79,4 +79,3 @@ crons = ["*/5 * * * *"]
 # Enables logging for production
 [env.production.observability]
 logs.enabled = true
-logs.persist = true
