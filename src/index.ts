@@ -313,6 +313,7 @@ class Security {
 }
 
 // ================= PAYFAST UTILITIES =================
+// ================= PAYFAST UTILITIES =================
 class PayFastHelper {
   /**
    * Custom MD5 implementation for PayFast signatures
@@ -365,32 +366,48 @@ class PayFastHelper {
   }
 
   static async generateSignature(data: Record<string, string>, passPhrase: string = ''): Promise<string> {
+    // 1. Filter out 'signature' AND any empty/null/undefined values
+    // PayFast will reject the signature if we include "key=" (empty value) in the string
+    const validKeys = Object.keys(data).filter(key => {
+      const value = data[key];
+      return key !== 'signature' && value !== null && value !== undefined && String(value).trim() !== '';
+    });
+
+    // 2. Sort keys alphabetically
+    const sortedKeys = validKeys.sort();
+
+    // 3. Construct the parameter string
     let pfOutput = '';
-    // ✅ CRITICAL FIX: PayFast requires parameters in alphabetical order
-    const sortedKeys = Object.keys(data)
-      .filter(key => key !== 'signature')
-      .sort();
-    
     for (const key of sortedKeys) {
       const value = String(data[key]).trim();
-      pfOutput += `${key}=${encodeURIComponent(value).replace(/%20/g, '+')}&`;
+      // PayFast requires spaces to be +, not %20
+      const encodedValue = encodeURIComponent(value).replace(/%20/g, '+');
+      pfOutput += `${key}=${encodedValue}&`;
     }
+
+    // 4. Remove the trailing '&'
     pfOutput = pfOutput.slice(0, -1);
-    if (passPhrase) {
-      pfOutput += `&passphrase=${encodeURIComponent(passPhrase.trim()).replace(/%20/g, '+')}`;
+
+    // 5. Append passphrase if it exists
+    if (passPhrase && passPhrase.trim() !== '') {
+      const encodedPassphrase = encodeURIComponent(passPhrase.trim()).replace(/%20/g, '+');
+      pfOutput += `&passphrase=${encodedPassphrase}`;
     }
-    console.log('[PayFast] Signature string:', pfOutput); // Debug log
+
+    console.log('[PayFast] Signature string:', pfOutput); 
     return this.md5(pfOutput);
   }
 
   static async verifyWebhookSignature(data: Record<string, string>, passPhrase: string): Promise<boolean> {
     const receivedSignature = data.signature;
     if (!receivedSignature) return false;
+    // The generator now handles filtering, so we can pass data directly
     const calculatedSignature = await this.generateSignature(data, passPhrase);
     return Security.timingSafeEqual(receivedSignature, calculatedSignature);
   }
 
   static getPayFastUrl(mode: string): string {
+    // Note: Sandbox URL is different from Live
     return mode === 'live' ? 'https://www.payfast.co.za/eng/process' : 'https://sandbox.payfast.co.za/eng/process';
   }
 }
@@ -1253,7 +1270,6 @@ async function handleCreatePayFastPayment(request: Request, env: Env, user: User
   try {
     // Check if PayFast is configured
     if (!env.PAYFAST_MERCHANT_ID || !env.PAYFAST_MERCHANT_KEY || !env.PAYFAST_PASSPHRASE) {
-      console.error('PayFast credentials not configured');
       return ResponseHelper.errorResponse(
         'PayFast payment method is not available',
         'PAYMENT_METHOD_UNAVAILABLE',
@@ -1262,63 +1278,61 @@ async function handleCreatePayFastPayment(request: Request, env: Env, user: User
         env
       );
     }
+
     const validation = await validateRequest(request, { plan: 'string' });
     if (!validation.valid) {
       return ResponseHelper.errorResponse('Invalid request data', 'VALIDATION_ERROR', validation.errors, 400, env);
     }
     const body = validation.data as { plan: string };
+
     // Get server-side price in USD
     const amountUSD = PLAN_PRICES[body.plan];
     if (!amountUSD) {
       return ResponseHelper.errorResponse('Invalid plan', 'INVALID_PLAN', null, 400, env);
     }
-    // Convert to ZAR (use real-time API in production)
-    async function getExchangeRate(): Promise<number> {
-      try {
-        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
-        const data = await response.json() as { rates: { ZAR: number } };
-        return data.rates.ZAR;
-      } catch (error) {
-        console.error('Failed to fetch exchange rate, using fallback');
-        return 18.5; // Fallback rate
-      }
-    }
-    const USD_TO_ZAR_RATE = await getExchangeRate();
+
+    // Convert to ZAR (Simple fixed rate fallback for stability during testing)
+    const USD_TO_ZAR_RATE = 18.5; 
     const amountZAR = parseFloat(amountUSD) * USD_TO_ZAR_RATE;
-    // Add VAT (15% for South Africa)
+    
+    // Add VAT (15%) and format to exactly 2 decimals "15.00"
     const totalAmountZAR = (amountZAR * 1.15).toFixed(2);
+    
     const paymentId = `${body.plan}_${user.id}_${Date.now()}`;
     const url = new URL(request.url);
     const baseUrl = `${url.protocol}//${url.host}`;
-    // Get user details from the secure 'user' object
+    
     const userNameParts = user.name.split(' ');
-    const firstName = userNameParts[0] || user.name;
-    const lastName = userNameParts.slice(1).join(' ') || ' ';
+    const firstName = userNameParts[0] || 'Customer';
+    const lastName = userNameParts.slice(1).join(' ') || ''; // Might be empty, which is why the new helper class is vital
+
+    // Construct the data object
+    // Note: We leave out empty optional fields to keep it clean
     const payfastData: Record<string, string> = {
       merchant_id: env.PAYFAST_MERCHANT_ID,
       merchant_key: env.PAYFAST_MERCHANT_KEY,
       amount: totalAmountZAR,
-      item_name: `DSN Research - ${body.plan.charAt(0).toUpperCase() + body.plan.slice(1)} Plan`,
-      item_description: `Monthly subscription to ${body.plan} plan (USD $${amountUSD})`,
-      name_first: firstName,
-      name_last: lastName,
+      item_name: `DSN Analytics ${body.plan.charAt(0).toUpperCase() + body.plan.slice(1)} Plan`,
       email_address: user.email,
       m_payment_id: paymentId,
-      custom_str1: user.id.toString(),
-      custom_str2: body.plan,
-      custom_str3: user.email,
       return_url: `${env.FRONTEND_URL}/payment-success?plan=${body.plan}&provider=payfast`,
       cancel_url: `${env.FRONTEND_URL}/payment-cancel?plan=${body.plan}`,
       notify_url: `${baseUrl}/api/payment/payfast-webhook`,
-      subscription_type: '1',
-      billing_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      recurring_amount: totalAmountZAR,
-      frequency: '3',
-      cycles: '0'
+      
+      // Custom fields to track user in webhook
+      custom_str1: user.id.toString(),
+      custom_str2: body.plan,
     };
+
+    // Only add names if they exist (cleaner signature generation)
+    if (firstName) payfastData.name_first = firstName;
+    if (lastName) payfastData.name_last = lastName;
+
+    // Generate Signature
     const signature = await PayFastHelper.generateSignature(payfastData, env.PAYFAST_PASSPHRASE);
     payfastData.signature = signature;
-    // ✅ FIXED: Log the USD amount, use correct column name
+
+    // Save Pending Payment to DB
     const amountCents = Math.round(parseFloat(amountUSD) * 100);
     await env.DB.prepare(
       `INSERT INTO payments (
@@ -1330,8 +1344,9 @@ async function handleCreatePayFastPayment(request: Request, env: Env, user: User
       user.client_id, 
       paymentId, 
       body.plan, 
-      amountCents  // Store as integer cents
+      amountCents 
     ).run();
+
     return ResponseHelper.jsonResponse({
       success: true,
       formData: payfastData,
@@ -1340,6 +1355,7 @@ async function handleCreatePayFastPayment(request: Request, env: Env, user: User
       amountUSD: amountUSD,
       amountZAR: totalAmountZAR
     }, 200, env);
+
   } catch (error) {
     console.error('PayFast payment creation error:', error);
     return ResponseHelper.errorResponse('Failed to create payment', 'PAYMENT_ERROR', null, 500, env);
